@@ -1,0 +1,8 @@
+build/
+*.o
+*.exe
+*.out
+*.root
+*.png
+*.pdf
+data/

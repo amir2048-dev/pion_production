@@ -1,0 +1,13 @@
+/gun/momentumAmp 0.1 GeV
+/run/printProgress 100000
+/run/beamOn 1000000
+/gun/momentumAmp 0.11 GeV
+/run/beamOn 1000000
+/gun/momentumAmp 0.12 GeV
+/run/beamOn 1000000
+/gun/momentumAmp 0.13 GeV
+/run/beamOn 1000000
+/gun/momentumAmp 0.14 GeV
+/run/beamOn 1000000
+/gun/momentumAmp 0.15 GeV
+/run/beamOn 1000000
