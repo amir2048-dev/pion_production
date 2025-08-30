@@ -5,4 +5,17 @@ build/
 *.root
 *.png
 *.pdf
+*.csv
+buildmt/
+*.o
+*.exe
+*.out
+*.root
+*.png
+*.pdf
+*.csv
 data/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile

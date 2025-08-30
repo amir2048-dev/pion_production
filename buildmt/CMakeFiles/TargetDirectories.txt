@@ -1,4 +1,0 @@
-/home/amir/Geant4/geant4-v11.1.2/sim/Gamma_on_lH2-main_new_physics/buildmt/CMakeFiles/sim.dir
-/home/amir/Geant4/geant4-v11.1.2/sim/Gamma_on_lH2-main_new_physics/buildmt/CMakeFiles/simulation.dir
-/home/amir/Geant4/geant4-v11.1.2/sim/Gamma_on_lH2-main_new_physics/buildmt/CMakeFiles/edit_cache.dir
-/home/amir/Geant4/geant4-v11.1.2/sim/Gamma_on_lH2-main_new_physics/buildmt/CMakeFiles/rebuild_cache.dir
