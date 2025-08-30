@@ -1,4 +1,5 @@
 /run/numberOfThreads 8
+/run/reinitializeGeometry
 /run/initialize
 /gun/momentumAmp 0.2 GeV
 /run/printProgress 10000
