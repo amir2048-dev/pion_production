@@ -14,19 +14,23 @@ MyDetectorConstruction::MyDetectorConstruction()
 MyDetectorConstruction::~MyDetectorConstruction()
 {}
 
+void MyDetectorConstruction::ConstructSDandField()
+{
+    G4MagneticField* magField = new G4UniformMagField(G4ThreeVector(0.,0.,0.1*tesla));
+    G4FieldManager* globalFieldMgr = G4TransportationManager::GetTransportationManager()->GetFieldManager();
+    G4Mag_UsualEqRhs* equation = new G4Mag_UsualEqRhs(magField);
+    G4MagIntegratorStepper* stepper = new G4ClassicalRK4(equation);
+    G4double minStep = 0.005 * mm;
+    G4ChordFinder* chordFinder = new G4ChordFinder(magField, minStep, stepper);
+    chordFinder->SetDeltaChord(1e-5 * mm);
+    globalFieldMgr->SetChordFinder(chordFinder);
+    globalFieldMgr->SetMinimumEpsilonStep(1e-5 * mm);
+    globalFieldMgr->SetMaximumEpsilonStep(1e-3 * mm);
+    globalFieldMgr->SetDetectorField(magField);
+}
 G4VPhysicalVolume *MyDetectorConstruction::Construct()
 {
-	G4MagneticField* magField = new G4UniformMagField(G4ThreeVector(0.,0.,0.1*tesla));
-	G4FieldManager* globalFieldMgr = G4TransportationManager::GetTransportationManager()-> GetFieldManager();
-	G4Mag_UsualEqRhs* equation = new G4Mag_UsualEqRhs(magField);
-	G4MagIntegratorStepper* stepper = new G4ClassicalRK4(equation);
-	G4double minStep = 0.005 * mm;  // Minimum step size
-	G4ChordFinder* chordFinder = new G4ChordFinder(magField, minStep, stepper);
-	chordFinder->SetDeltaChord(1e-5 * mm);
-	globalFieldMgr->SetChordFinder(chordFinder);
-	globalFieldMgr->SetMinimumEpsilonStep(1e-5 * mm);
-	globalFieldMgr->SetMaximumEpsilonStep(1e-3 * mm);
-	globalFieldMgr->SetDetectorField(magField);
+	G4FieldManager* globalFieldMgr = G4TransportationManager::GetTransportationManager()->GetFieldManager();
 	G4double fact = 1;
 	G4NistManager *nist = G4NistManager::Instance();
 	G4Material *worldMat = nist->FindOrBuildMaterial("G4_AIR");
