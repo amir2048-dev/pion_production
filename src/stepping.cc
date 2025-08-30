@@ -179,7 +179,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		{
 			fEventAction->pionfluxboolian[i][j] = 1;
 		}
-		if (true)
+		if (false)
 		{
 			j +=399;
 			i +=199; 

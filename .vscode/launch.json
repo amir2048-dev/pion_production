@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run sim (pick macro)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": ["${workspaceFolder}/macros/${input:macroPick}"],
+      "cwd": "${command:cmake.getLaunchTargetDirectory}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "preLaunchTask": "CMake: build"
+    },
+    {
+      "name": "Run sim (active .mac)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": ["${file}"],
+      "cwd": "${command:cmake.getLaunchTargetDirectory}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "preLaunchTask": "CMake: build"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "macroPick",
+      "type": "pickString",
+      "description": "Choose a macro in macros/",
+      "options": [
+        "run1.mac",
+        "run.mac",
+        "vis.mac"
+      ]
+    }
+  ]
+}
