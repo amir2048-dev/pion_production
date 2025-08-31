@@ -25,12 +25,17 @@ class MyDetectorConstruction : public G4VUserDetectorConstruction
 	
 	virtual G4VPhysicalVolume *Construct();
 	virtual void ConstructSDandField() override;
+    G4VPhysicalVolume* GetWorldPV()    const { return fPhysWorld; }
+    G4VPhysicalVolume* GetAbsorberPV() const { return fPhysAbsorber; }
 	private:
 		G4UserLimits* fStepLimit = nullptr; // pointer to user step limits
 	static G4ThreadLocal G4MagneticField*     tMagField;
     static G4ThreadLocal G4Mag_UsualEqRhs*    tEquation;
     static G4ThreadLocal G4MagIntegratorStepper* tStepper;
     static G4ThreadLocal G4ChordFinder*       tChord;
+	G4VPhysicalVolume* fPhysWorld = nullptr;
+	G4VPhysicalVolume* fPhysAbsorber = nullptr;
+
 
 };
 

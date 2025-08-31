@@ -1,4 +1,5 @@
 #include "action.hh"
+#include "construction.hh"
 
 MyActionInitialization::MyActionInitialization()
 {}
@@ -12,12 +13,18 @@ void MyActionInitialization::BuildForMaster() const
 void MyActionInitialization::Build() const
 {
 	MyPrimaryGenerator *generator = new MyPrimaryGenerator();
-	SetUserAction(generator);
 	MyRunAction *runAction = new MyRunAction();
-	SetUserAction(runAction);
 	MyEventAction *eventAction = new MyEventAction();
+
+	SetUserAction(generator);
+	SetUserAction(runAction);
 	SetUserAction(eventAction);
-	MySteppingAction *steppingAction = new MySteppingAction(eventAction,runAction);
+
+	auto* det = dynamic_cast<const MyDetectorConstruction*>(G4RunManager::GetRunManager()->GetUserDetectorConstruction());
+  	const G4VPhysicalVolume* absorberPV = det ? det->GetAbsorberPV() : nullptr;
+	const G4VPhysicalVolume* worldPV    = det ? det->GetWorldPV()    : nullptr;
+
+	MySteppingAction *steppingAction = new MySteppingAction(eventAction,runAction,absorberPV, worldPV);
 	SetUserAction(steppingAction);
 	
 }

@@ -1,14 +1,13 @@
 #include "stepping.hh" 
 #include "G4TrackStatus.hh"
 
-MySteppingAction::MySteppingAction(MyEventAction *eventAction, MyRunAction* runAction)
-{
-    fEventAction = eventAction;
-    fRunAction = runAction;
-    afterPhotonuclear=false;
-    
-    
-}
+constexpr G4int PDG_Gamma    = 22;     // γ
+constexpr G4int PDG_Electron = 11;     // e⁻
+constexpr G4int PDG_Positron = -11;    // e⁺
+constexpr G4int PDG_PionPlus = 211;    // π⁺
+constexpr G4int PDG_PionMinus= -211;   // π⁻
+constexpr G4int PDG_PionZero = 111;    // π⁰
+constexpr G4int PDG_Neutron  = 2112;   // n
 
 MySteppingAction::~MySteppingAction()
 {}
@@ -19,7 +18,7 @@ namespace
 		// gamma, e-, e+, pi+, pi-, neutron
 		switch (pdg) 
 		{
-			case 22: case 11: case -11: case 211: case -211: case 2112: return true;
+			case PDG_Gamma: case PDG_Electron: case PDG_Positron: case PDG_PionPlus: case PDG_PionMinus: case PDG_Neutron: return true;
 			default: return false;
 		}
     }
@@ -37,6 +36,8 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		track->SetTrackStatus(fStopAndKill);
 		return;
 	}
+	auto* pre = step->GetPreStepPoint();
+	const G4VPhysicalVolume* prePV  = pre->GetPhysicalVolume();
 	fRunAction->fRun->steps+=1;
 	static const G4double minAllowedStep = 1.1e-6 * mm;  // Prevents 0-length steps
 	if (step->GetStepLength() < minAllowedStep)
@@ -54,7 +55,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		track->SetTrackStatus(fStopAndKill);  // Kill the particle
 		return;
 	}
-    if (pdg != 211) 
+    if (pdg != PDG_PionPlus) 
     {
     	
     	if (ekin<200*MeV)
@@ -73,7 +74,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    // (2) Inside the target material
 	    // (3) First time particle meets this volume
 	    if (step->GetTrack()->GetTrackID() == 1
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber"
+		&& prePV==fAbsorberPV
 		&& IsFirstStepInVolume)
 	    {
 		fRunAction->fRun->nin+=1;
@@ -84,19 +85,19 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    // (1) Gamma ray
 	    // (2) Compton scattering
 	    // (3) Inside the target material
-	    if (pdg==22 && processName=="compt"
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+	    if (pdg==PDG_Gamma && processName=="compt"
+		&& prePV==fAbsorberPV)
 	    {
 		fRunAction->fRun->ncompton+=1;
 	    }
-	    if (pdg==22 && processName=="conv"
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+	    if (pdg==PDG_Gamma && processName=="conv"
+		&& prePV==fAbsorberPV)
 	    {
 		fRunAction->fRun->nconv+=1;
 	    }
-	    if (step->GetTrack()->GetTrackID() == 1 && pdg==11 && IsFirstStepInVolume
+	    if (step->GetTrack()->GetTrackID() == 1 && pdg==PDG_Electron && IsFirstStepInVolume
 		&& processName=="Transportation"
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+		&& prePV==fAbsorberPV)
 	    {
 		fRunAction->fRun->nTransportation+=1;
 	    }
@@ -106,18 +107,18 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    	afterPhotonuclear = false;
 	    }
 	    
-	    if (step->GetTrack()->GetTrackID() == 1 && pdg==22 && IsFirstStepInVolume
+	    if (step->GetTrack()->GetTrackID() == 1 && pdg==PDG_Gamma && IsFirstStepInVolume
 		&& processName=="photonNuclear" 
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+		&& prePV==fAbsorberPV)
 	    {
 	    	//std::cout << "process: "                  << processName
 	    	//    << std::endl;
 	    	//afterPhotonuclear = true;
 		fRunAction->fRun->nPhotoNuclear+=1;
 	    }
-	    if (step->GetTrack()->GetTrackID() == 1 && pdg==22 && IsFirstStepInVolume
+	    if (step->GetTrack()->GetTrackID() == 1 && pdg==PDG_Gamma && IsFirstStepInVolume
 		&& processName!="photonNuclear" && processName!="Transportation" && processName!="conv" && processName!="compt" 
-		&& processName=="phot"					&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+		&& processName=="phot"					&& prePV==fAbsorberPV)
 	    {
 	    	fRunAction->fRun->nPhot+=1;
 	    	//std::cout << "process: "                  << processName
@@ -134,14 +135,15 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     	G4String name = track->GetParticleDefinition()->GetParticleName();
     	auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
     	const G4String processName = step->GetPostStepPoint()->GetProcessDefinedStep()->GetProcessName();
-	    if (pdg == 211 || processName=="pi+Inelastic" )
+		
+	    if (pdg == PDG_PionPlus || processName=="pi+Inelastic" )
 	    {
 	    	//std::cout<< "process: "                  << processName << std::endl;
 	    	//std::cout << "pi+ energy out = " <<ekin <<" MeV" <<std::endl;
 	    	fRunAction->fRun->npiPosInElas +=1;
 	    
 	    }
-    	    if (pdg == 211 && step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber"&& IsFirstStepInVolume)
+    	    if (pdg == PDG_PionPlus && prePV==fAbsorberPV && IsFirstStepInVolume)
 	    {
 	    	//std::cout << "got pion+" <<std::endl;
 	    	//std::cout << "pi+ energy in = " <<ekin <<" MeV" <<std::endl;
@@ -152,15 +154,15 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    	//std::cout << "kinetic energy" << step->GetTrack()->GetKineticEnergy() << std::endl;
 	    	
 	    }
-	    if (pdg == 111 && IsFirstStepInVolume
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+	    if (pdg == PDG_PionZero && IsFirstStepInVolume
+		&& prePV==fAbsorberPV)
 	    {
 	    	//std::cout << "got pion0" <<std::endl;
 	    	//fRunAction->fRun->npiZerIn+=1;
 	    	fEventAction->ifPionZProduced=true;
 	    }
-	    if (pdg == -221 && IsFirstStepInVolume
-		&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+	    if (pdg == PDG_PionMinus && IsFirstStepInVolume
+		&& prePV==fAbsorberPV)
 	    {
 	    	//std::cout << "got pion-" <<std::endl;
 	    	
@@ -172,7 +174,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    	fEventAction->ifPionNProduced=true;
 	    	
 	    }
-	    if (pdg == 211 ||pdg == -221)
+	    if (pdg == PDG_PionPlus ||pdg == PDG_PionMinus)
 	    {
 	    	//std::cout << "Step length: "              << step->GetStepLength()/CLHEP::centimeter << " cm"
 		//    << std::endl;
@@ -199,7 +201,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		}
 	    	
 	    }
-	    if (pdg == 211  && step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physWorld"&& IsFirstStepInVolume)
+	    if (pdg == PDG_PionPlus  && prePV==fWorldPV && IsFirstStepInVolume)
 	    {
 	    	//std::cout << "pi+ energy out = " <<ekin <<" MeV" <<std::endl;
 	    	int i = ekin;
@@ -208,13 +210,13 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    	fRunAction->fRun->npiPosOut+=1;
 	    	
 	    }
-	    if (pdg == 111 && step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physWorld"&& IsFirstStepInVolume)
+	    if (pdg == PDG_PionZero && prePV==fWorldPV && IsFirstStepInVolume)
 	    {
 	    	//std::cout << "got pion0" <<std::endl;
 	    	fRunAction->fRun->npiZerOut+=1;
 	    	
 	    }
-	    if (pdg == -221 && step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physWorld"&& IsFirstStepInVolume)
+	    if (pdg == PDG_PionMinus && prePV==fWorldPV && IsFirstStepInVolume)
 	    {
 	    	//std::cout << "pi- energy out = " <<ekin <<" MeV" <<std::endl;
 	    	int i = ekin;
@@ -226,7 +228,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	    
     }
     
-    /*if (pdg == 22  && step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber"&& IsFirstStepInVolume)
+    /*if (pdg == PDG_Gamma  && prePV==fAbsorberPV && IsFirstStepInVolume)
 	{
 	    	//std::cout << "e- energy out = " <<ekin <<" MeV" <<std::endl;
 	    	int i = ekin;
@@ -254,7 +256,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	}
    */
    /*
-    if (pdg == 11&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+    if (pdg == PDG_Electron&& sprePV==fAbsorberPV)
     {
     		
     		//std::cout << "e- Step length: "              << step->GetStepLength()/CLHEP::centimeter << " cm"
@@ -277,7 +279,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     }
     
     
-     if (pdg == 22&& step->GetPreStepPoint()->GetPhysicalVolume()->GetName() == "physAbsorber")
+     if (pdg == PDG_Gamma&& prePV==fAbsorberPV)
     {
     		//std::cout << "gamma Step length: "              << step->GetStepLength()/CLHEP::centimeter << " cm"
 		//<< std::endl;
