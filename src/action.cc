@@ -1,20 +1,18 @@
 #include "action.hh"
 #include "construction.hh"
 
-MyActionInitialization::MyActionInitialization()
-{}
 MyActionInitialization::~MyActionInitialization()
 {}
 void MyActionInitialization::BuildForMaster() const
 {
-	MyRunAction *runAction = new MyRunAction();
+	MyRunAction *runAction = new MyRunAction(cfg_);
 	SetUserAction(runAction);
 }
 void MyActionInitialization::Build() const
 {
-	MyPrimaryGenerator *generator = new MyPrimaryGenerator();
-	MyRunAction *runAction = new MyRunAction();
-	MyEventAction *eventAction = new MyEventAction();
+	MyPrimaryGenerator *generator = new MyPrimaryGenerator(cfg_);
+	MyRunAction *runAction = new MyRunAction(cfg_);
+	MyEventAction *eventAction = new MyEventAction(cfg_);
 
 	SetUserAction(generator);
 	SetUserAction(runAction);
@@ -24,7 +22,7 @@ void MyActionInitialization::Build() const
   	const G4VPhysicalVolume* absorberPV = det ? det->GetAbsorberPV() : nullptr;
 	const G4VPhysicalVolume* worldPV    = det ? det->GetWorldPV()    : nullptr;
 
-	MySteppingAction *steppingAction = new MySteppingAction(eventAction,runAction,absorberPV, worldPV);
+	MySteppingAction *steppingAction = new MySteppingAction(eventAction,runAction,cfg_,absorberPV, worldPV);
 	SetUserAction(steppingAction);
 	
 }

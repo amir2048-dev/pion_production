@@ -1,6 +1,6 @@
 #include "run.hh"
 #include "event.hh"
-Run::Run()
+Run::Run(const SimConfig& cfg) : cfg_(cfg)
 {
     ncompton=0;
     nin=0;
@@ -17,20 +17,8 @@ Run::Run()
     nPhot=0;
     neventsOfPion=0;
     npiPosInElas =0;
-    //G4int runID = run->GetRunID();
-    //std::stringstream strRunID;
-    //strRunID << runID;
-    //G4String fileName = "Output" +strRunID.str() + ".csv";
 }
-//void Run::RecordEvent(const G4UserEventAction* event)
-//{
-//	const MyEventAction* myevent = static_cast<const MyEventAction*>(event);
-//	G4int evtNb = myevent->GetEventID();
-//	G4cout << myevent->ifPionPProduced << G4endl;
-//	
-//
-//
-//}
+
 void Run::Merge(const G4Run* aRun)
 {
 	

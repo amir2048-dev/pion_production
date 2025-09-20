@@ -1,6 +1,6 @@
 #include "event.hh"
 
-MyEventAction::MyEventAction()
+MyEventAction::MyEventAction(const SimConfig& cfg): cfg_(cfg)
 {
     fEdep = 0.;
     fEventID = 0;

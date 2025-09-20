@@ -3,12 +3,13 @@
 
 #include "G4Run.hh"
 #include "G4UserEventAction.hh"
+#include "SimConfig.hh"
 
 
 class Run : public G4Run
 {
 public:
-	Run();
+	Run(const SimConfig& cfg);
 	virtual ~Run(){};
 //	void RecordEvent(const G4UserEventAction*) override;
 	void Merge(const G4Run*) override;
@@ -37,6 +38,7 @@ public:
 	G4int steps;
 	G4int npiPosInElas;
 private:
+	const SimConfig& cfg_;
 	
 
 

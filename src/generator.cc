@@ -1,18 +1,14 @@
 #include "generator.hh"
 #include "Randomize.hh"
 
-MyPrimaryGenerator::MyPrimaryGenerator()
+MyPrimaryGenerator::MyPrimaryGenerator(const SimConfig& cfg): cfg_(cfg)
 {
 	fParticleGun = new G4ParticleGun;
 	G4ParticleTable *particleTable = G4ParticleTable::GetParticleTable();
 	G4String particleName = "e-";
 	G4ParticleDefinition *particle = particleTable->FindParticle(particleName);
-	//G4double fact=2;
-	//G4ThreeVector pos(0.,0.,-1.5 *cm*fact);
 	G4ThreeVector mom(0.,0.,1.);
-	//fParticleGun->SetParticlePosition(pos);
 	fParticleGun->SetParticleMomentumDirection(mom);
-	
 	fParticleGun->SetParticleDefinition(particle);
 }
 

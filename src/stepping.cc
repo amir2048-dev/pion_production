@@ -26,13 +26,52 @@ namespace
 			default: return false;
 		}
     }
-	inline void gridIndex(const G4ThreeVector& p0, const G4ThreeVector& p1, int& i, int& j)
-    {
-		static const double invD = 1.0/(0.2*mm);
-		const double xmid = 0.5*(p0.x()+p1.x());
-		const double zmid = 0.5*(p0.z()+p1.z());
-		i = int(xmid*invD + 50.0);
-		j = int(zmid*invD + 100.0);
+	inline void worldToIdx(double x, double z, double pixelX, double pixelZ, int nX, int nZ,  double xOrigin, double zOrigin, int& ix, int& iz)
+	{
+		const double gx = (x - xOrigin) / pixelX + 0.5 * nX;
+		const double gz = (z - zOrigin) / pixelZ + 0.5 * nZ;
+		ix = static_cast<int>(std::floor(gx));
+		iz = static_cast<int>(std::floor(gz));
+	}
+	// Traverse all cells intersected by segment p0→p1 on X–Z plane.
+	// Calls `visit(ix,iz)` for each crossed cell (no allocations).
+	template <typename Visitor>
+	inline int raycastCellsXZ(const G4ThreeVector& p0,const G4ThreeVector& p1, double pixelX, double pixelZ, int nX, int nZ, double xOrigin, double zOrigin, Visitor&& visit)
+	{
+		int ix0, iz0, ix1, iz1;
+		worldToIdx(p0.x(), p0.z(), pixelX, pixelZ, nX, nZ, xOrigin, zOrigin, ix0, iz0);
+		worldToIdx(p1.x(), p1.z(), pixelX, pixelZ, nX, nZ, xOrigin, zOrigin, ix1, iz1);
+
+		if (ix0 == ix1 && iz0 == iz1) { visit(ix0, iz0); return 1; }
+
+		const double dx = p1.x() - p0.x();
+		const double dz = p1.z() - p0.z();
+		const int stepx = (dx > 0) - (dx < 0);
+		const int stepz = (dz > 0) - (dz < 0);
+
+		const double invDx = (dx != 0.0) ? (1.0 / dx) : 1e300;
+		const double invDz = (dz != 0.0) ? (1.0 / dz) : 1e300;
+
+		const double xEdge0 = xOrigin + ( (ix0 + (stepx>0)) - 0.5*nX ) * pixelX;
+		const double zEdge0 = zOrigin + ( (iz0 + (stepz>0)) - 0.5*nZ ) * pixelZ;
+
+		double tMaxX   = (dx != 0.0) ? ( (xEdge0 - p0.x()) * invDx ) : 1e300;
+		double tMaxZ   = (dz != 0.0) ? ( (zEdge0 - p0.z()) * invDz ) : 1e300;
+		const double tDeltaX = (dx != 0.0) ? ( pixelX * std::abs(invDx) ) : 1e300;
+		const double tDeltaZ = (dz != 0.0) ? ( pixelZ * std::abs(invDz) ) : 1e300;
+
+		int ix = ix0, iz = iz0, count = 0;
+		visit(ix, iz); ++count;
+
+		// March until we reach end cell
+		while (ix != ix1 || iz != iz1) {
+			if (tMaxX < tMaxZ) { ix += stepx; tMaxX += tDeltaX; }
+			else               { iz += stepz; tMaxZ += tDeltaZ; }
+			visit(ix, iz); ++count;
+
+			if (count > (nX + nZ + 8)) break; // safety
+		}
+		return count;
 	}
 }
 MySteppingAction::~MySteppingAction()
@@ -68,19 +107,22 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 				fEventAction->ifPionPProduced=true;
 							
 			}
-			G4ThreeVector startPos = pre->GetPosition();
-			G4ThreeVector endPos = step->GetPostStepPoint()->GetPosition();
-			int i,j;
-			gridIndex(startPos, endPos, i, j);
-			if (j<200 && i<100 && i>=0 && j>=0)
-			{
-				fEventAction->pionfluxboolian[i][j] = 1;
-			}
+			G4ThreeVector p0 = pre->GetPosition();
+			G4ThreeVector p1 = step->GetPostStepPoint()->GetPosition();
+			raycastCellsXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nAbsorberX, cfg_.nAbsorberZ,
+               cfg_.absorberXOrigin, cfg_.absorberZOrigin,
+               [&](int ix, int iz){
+                 if (0<=ix && ix<cfg_.nAbsorberX && 0<=iz && iz<cfg_.nAbsorberZ)
+                   fEventAction->pionfluxboolian[ix][iz] = 1;
+               });
 			if (false)
 			{
-				j +=399;
-				i +=199; 
-				fEventAction->pionfluxlargeboolian[i][j] = 1;
+				raycastCellsXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nWorldX, cfg_.nWorldZ,
+               cfg_.worldXOrigin, cfg_.worldZOrigin,
+               [&](int ix, int iz){
+                 if (0<=ix && ix<cfg_.nWorldX && 0<=iz && iz<cfg_.nWorldZ)
+                   fEventAction->pionfluxlargeboolian[ix][iz] = 1;
+               });
 			}
 				
 			if (prePV==fWorldPV && IsFirstStepInVolume)
@@ -103,38 +145,42 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 
     	if (pdg == PDG_Electron&& prePV==fAbsorberPV)
     	{
-			G4ThreeVector startPos = pre->GetPosition();
-			G4ThreeVector endPos = step->GetPostStepPoint()->GetPosition();
-			int i,j;
-			gridIndex(startPos, endPos, i, j);
-			if (j<200 && i<100 && i>=0 && j>=0)
-			{
-				fEventAction->efluxboolian[i][j] = 1;
-			}
+			G4ThreeVector p0 = pre->GetPosition();
+			G4ThreeVector p1 = step->GetPostStepPoint()->GetPosition();
+			raycastCellsXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nAbsorberX, cfg_.nAbsorberZ,
+               cfg_.absorberXOrigin, cfg_.absorberZOrigin,
+               [&](int ix, int iz){
+                 if (0<=ix && ix<cfg_.nAbsorberX && 0<=iz && iz<cfg_.nAbsorberZ)
+                   fEventAction->efluxboolian[ix][iz] = 1;
+               });
     	}
     
     
      	if (pdg == PDG_Gamma&& prePV==fAbsorberPV)
     	{
-			G4ThreeVector startPos = pre->GetPosition();
-			G4ThreeVector endPos = step->GetPostStepPoint()->GetPosition();
-			int i,j;
-			gridIndex(startPos, endPos, i, j);
-			if (j<200 && i<100 && i>=0 && j>=0)
+			G4ThreeVector p0 = pre->GetPosition();
+			G4ThreeVector p1 = step->GetPostStepPoint()->GetPosition();
+			if (ekin>200*MeV)
 			{
-				fEventAction->gammafluxboolian[i][j] = 1;
-				if (ekin>200*MeV)
-				{
-					fEventAction->gammafluxover200boolian[i][j] = 1;
-				}
-				if (IsFirstStepInVolume)
-				{
-					fEventAction->gammacreationboolian[i][j] = 1;
-				}
+				raycastCellsXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nAbsorberX, cfg_.nAbsorberZ, cfg_.absorberXOrigin, cfg_.absorberZOrigin,
+				[&](int ix, int iz){
+				if (0<=ix && ix<cfg_.nAbsorberX && 0<=iz && iz<cfg_.nAbsorberZ)
+				fEventAction->gammafluxover200boolian[ix][iz] = 1;
+			});
 			}
+			if (IsFirstStepInVolume)
+			{
+				raycastCellsXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nAbsorberX, cfg_.nAbsorberZ, cfg_.absorberXOrigin, cfg_.absorberZOrigin,
+				[&](int ix, int iz){
+				if (0<=ix && ix<cfg_.nAbsorberX && 0<=iz && iz<cfg_.nAbsorberZ)
+				fEventAction->gammacreationboolian[ix][iz] = 1;
+				});
+			}
+			
     	}
     
 	}
+
 	if(gRunDebug)
 	{	
 		fRunAction->fRun->steps+=1; // Count all steps

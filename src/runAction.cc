@@ -2,16 +2,13 @@
 #include <thread>
 #include <fstream>
 
-MyRunAction::MyRunAction()
-{
-    
-}
+
 MyRunAction::~MyRunAction()
 {}
 
 G4Run* MyRunAction::GenerateRun()
 {
-	fRun = new Run();
+	fRun = new Run(cfg_);
 	return fRun;
 
 }
@@ -19,7 +16,6 @@ G4Run* MyRunAction::GenerateRun()
 void MyRunAction::BeginOfRunAction(const G4Run* run)
 {
     
-    //    man->OpenFile(fileName);
 }
 void MyRunAction::EndOfRunAction(const G4Run* run)
 {

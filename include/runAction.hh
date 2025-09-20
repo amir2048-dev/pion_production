@@ -6,12 +6,13 @@
 #include "G4SystemOfUnits.hh"
 #include "G4Run.hh"
 #include "run.hh"
+#include "SimConfig.hh"
 #include <mutex>
 
 class MyRunAction : public G4UserRunAction
 {
 public: 
-	MyRunAction();
+	MyRunAction(const SimConfig& cfg): cfg_(cfg) {};
 	~MyRunAction();
 	virtual G4Run* GenerateRun();
 	virtual void BeginOfRunAction(const G4Run*);
@@ -19,7 +20,8 @@ public:
 	Run* fRun;
 	
 private:
-	//Run* fRun;
+	const SimConfig& cfg_;
+	
 };
 
 

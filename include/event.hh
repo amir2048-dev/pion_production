@@ -11,7 +11,7 @@
 class MyEventAction : public G4UserEventAction
 {
 public:
-	MyEventAction();
+	MyEventAction(const SimConfig& cfg);
 	~MyEventAction();
 	
 	virtual void BeginOfEventAction(const G4Event*);
@@ -37,6 +37,7 @@ private:
     G4int fEventID;
     int numRows;
     int numCols;
+    const SimConfig& cfg_;
     
 
 };

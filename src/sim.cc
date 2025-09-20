@@ -17,6 +17,7 @@
 #include "G4Timer.hh"
 #include "Randomize.hh"
 #include <ctime>
+#include "SimConfig.hh"
 
 int main(int argc, char** argv)
 {
@@ -24,10 +25,10 @@ int main(int argc, char** argv)
     myTimer.Start(); 
     G4long seed = static_cast<G4long>(time(nullptr));
     CLHEP::HepRandom::setTheSeed(seed);
-    
+    SimConfig cfg;
     auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
     //G4RunManagerFactory *runManager = new G4RunManagerFactory();
-    runManager->SetUserInitialization(new MyDetectorConstruction());
+    runManager->SetUserInitialization(new MyDetectorConstruction(cfg));
     //runManager->SetUserInitialization(new MyphysicsList());
     
     G4VModularPhysicsList* physicsList = new PhysicsList;
@@ -39,7 +40,7 @@ int main(int argc, char** argv)
     runManager->SetUserInitialization(physicsList);
     //G4StepLimiterPhysics* stepLimitPhys = new G4StepLimiterPhysics();
     //runManager->SetUserInitialization(stepLimitPhys);
-    runManager->SetUserInitialization(new MyActionInitialization());
+    runManager->SetUserInitialization(new MyActionInitialization(cfg));
     G4UIExecutive *ui = 0;
     if (argc == 1)
     {

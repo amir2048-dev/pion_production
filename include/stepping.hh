@@ -7,11 +7,12 @@
 #include "construction.hh"
 #include "event.hh"
 #include "runAction.hh"
+#include "SimConfig.hh"
 class MySteppingAction: public G4UserSteppingAction
 {
 public:
-	MySteppingAction(MyEventAction* eventAction, MyRunAction* runAction, const G4VPhysicalVolume* absorberPV,const G4VPhysicalVolume* worldPV):
-	fEventAction(eventAction), fRunAction(runAction), fAbsorberPV(absorberPV), fWorldPV(worldPV) {};
+	MySteppingAction(MyEventAction* eventAction, MyRunAction* runAction,const SimConfig& cfg, const G4VPhysicalVolume* absorberPV,const G4VPhysicalVolume* worldPV):
+	fEventAction(eventAction), fRunAction(runAction), cfg_(cfg),fAbsorberPV(absorberPV), fWorldPV(worldPV) {};
 	~MySteppingAction();
 	void UserSteppingAction(const G4Step* step) override;
 	
@@ -21,7 +22,7 @@ private:
   	const G4VPhysicalVolume* fAbsorberPV = nullptr; 
   	const G4VPhysicalVolume* fWorldPV    = nullptr;
 	G4bool afterPhotonuclear = false;
-
+	const SimConfig& cfg_;
 
 
 };
