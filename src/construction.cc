@@ -54,18 +54,14 @@ G4VPhysicalVolume *MyDetectorConstruction::Construct()
 	G4FieldManager* globalFieldMgr = G4TransportationManager::GetTransportationManager()->GetFieldManager();
 	G4NistManager *nist = G4NistManager::Instance();
 	G4Material *worldMat = nist->FindOrBuildMaterial("G4_AIR"); 
-	G4Box *solidWorld = new G4Box("solidWorld", cfg_.worldX/2, cfg_.worldY/2, cfg_.worldZ/2 ); // (name halfx halfy halfz)
+	G4Box *solidWorld = new G4Box("solidWorld", cfg_.worldX, cfg_.worldY, cfg_.worldZ ); // (name halfx halfy halfz)
 	fSolidWorld = solidWorld;
 	G4LogicalVolume *logicWorld = new G4LogicalVolume(solidWorld,worldMat,"logicWorld"); // (solidworld, matirial, name)
-	G4double maxStep = cfg_.maxStep;
-  	fStepLimit = new G4UserLimits(maxStep);
-  	logicWorld->SetUserLimits(fStepLimit);
 	fPhysWorld = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.),  logicWorld,"physWorld",0,false,0,true);
 	G4Material *absorberMat = nist->FindOrBuildMaterial("G4_Pb"); 
-	G4Box 	*solidAbsorber = new G4Box("solidAbsorber",cfg_.absorberX/2, cfg_.absorberY/2, cfg_.absorberZ/2); //(name halfx halfy halfz) 
+	G4Box 	*solidAbsorber = new G4Box("solidAbsorber",cfg_.absorberX, cfg_.absorberY, cfg_.absorberZ); //(name halfx halfy halfz) 
 	fSolidAbsorber = solidAbsorber;
 	G4LogicalVolume *logicAbsorber = new G4LogicalVolume(solidAbsorber,absorberMat,"logicAbsorber");
-  	logicAbsorber->SetUserLimits(fStepLimit);
 	fPhysAbsorber = new G4PVPlacement(0, G4ThreeVector(cfg_.absorberXOrigin,cfg_.absorberYOrigin,cfg_.absorberZOrigin),  logicAbsorber,"physAbsorber",logicWorld,false,0,true);
 	
 	return fPhysWorld;

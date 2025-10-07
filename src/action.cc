@@ -6,12 +6,14 @@ MyActionInitialization::~MyActionInitialization()
 void MyActionInitialization::BuildForMaster() const
 {
 	MyRunAction *runAction = new MyRunAction(cfg_);
+	runAction->SetMacroPath(macroPath_);
 	SetUserAction(runAction);
 }
 void MyActionInitialization::Build() const
 {
 	MyPrimaryGenerator *generator = new MyPrimaryGenerator(cfg_);
 	MyRunAction *runAction = new MyRunAction(cfg_);
+	runAction->SetMacroPath(macroPath_);
 	MyEventAction *eventAction = new MyEventAction(cfg_);
 
 	SetUserAction(generator);

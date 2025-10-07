@@ -3,6 +3,7 @@
 
 #include "G4Run.hh"
 #include "G4UserEventAction.hh"
+#include <vector>
 #include "SimConfig.hh"
 
 
@@ -11,32 +12,28 @@ class Run : public G4Run
 public:
 	Run(const SimConfig& cfg);
 	virtual ~Run(){};
-//	void RecordEvent(const G4UserEventAction*) override;
 	void Merge(const G4Run*) override;
-	G4int ncompton;
-	G4int nin;
-	G4int nTransportation;
-	G4int nconv;
-	G4int nPhotoNuclear;
-	G4int npiPosIn;
-	G4int npiNegIn;
-	G4int npiZerIn;
-	G4int npiPosOut;
-	G4int npiNegOut;
-	G4int npiZerOut;
-	G4int neventsOfPion;
-	G4int nPhot;
-	G4int pionflux[100][200] = {0};
-	G4int pionfluxlarge[500][1000] = {0};
-	G4int eflux[100][200] = {0};
-	G4int gammaflux[100][200] = {0};
-	G4int gammafluxover200[100][200] = {0};
-	G4int gammacreation[100][200] = {0};
-	G4int pionEnergyIn[1000] = {0};
-	G4int gammaEnergy[1000] = {0};
-	G4int pionEnergyOut[1000] = {0};
-	G4int steps;
-	G4int npiPosInElas;
+    // scalars
+  	G4int npiPosIn = 0, npiPosOut = 0, steps = 0;
+	// spectra 
+  	std::vector<G4int> pionEnergyIn;   // size = cfg_.energyBins
+  	std::vector<G4int> pionEnergyOut;  // size = cfg_.energyBins
+  	std::vector<G4int> gammaEnergy;    // size = cfg_.energyBins
+	// fluence maps (accumulate path length)
+	// absorber-local grids (X–Z)
+	std::vector<double> pionFluenceAbs;        // length sum per cell
+	std::vector<double> eFluenceAbs;
+	std::vector<double> gammaFluenceAbs;
+	std::vector<double> gammaFluenceOver200Abs;
+	std::vector<double> gammaCreationAbs;      // if you want path length of "created" gammas' first step; or drop if not meaningful
+	// world grid (X–Z)
+	std::vector<double> pionFluenceWorld;
+
+	// flatteners
+  	inline int AbsIndex(int ix, int iz)   const { return ix + iz * cfg_.nAbsorberX; }
+  	inline int WorldIndex(int ix, int iz) const { return ix + iz * cfg_.nWorldX;   }
+
+	
 private:
 	const SimConfig& cfg_;
 	

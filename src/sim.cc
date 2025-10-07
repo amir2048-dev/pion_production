@@ -26,52 +26,41 @@ int main(int argc, char** argv)
     G4long seed = static_cast<G4long>(time(nullptr));
     CLHEP::HepRandom::setTheSeed(seed);
     SimConfig cfg;
+    std::string macroPath;
     auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
-    //G4RunManagerFactory *runManager = new G4RunManagerFactory();
     runManager->SetUserInitialization(new MyDetectorConstruction(cfg));
-    //runManager->SetUserInitialization(new MyphysicsList());
-    
     G4VModularPhysicsList* physicsList = new PhysicsList;
-    //G4VModularPhysicsList* physicsList = new QGSP_BERT;
-    //G4VModularPhysicsList* physicsList = new FTFP_BERT;
-    //	G4VModularPhysicsList* physicsList = new G4EmStandardPhysics;
-    
-    //physicsList->SetVerboseLevel(1);
     runManager->SetUserInitialization(physicsList);
-    //G4StepLimiterPhysics* stepLimitPhys = new G4StepLimiterPhysics();
-    //runManager->SetUserInitialization(stepLimitPhys);
-    runManager->SetUserInitialization(new MyActionInitialization(cfg));
+    
     G4UIExecutive *ui = 0;
     if (argc == 1)
     {
-    	runManager->Initialize();
         ui = new G4UIExecutive(argc, argv);
+        macroPath = "vis.mac";
     }
+    else
+    {
+        macroPath = argv[1];
+    }
+    runManager->SetUserInitialization(new MyActionInitialization(cfg,macroPath));
+    
+    
     G4VisExecutive *visManager = new G4VisExecutive();
     visManager->Initialize();
     G4UImanager *UImanager = G4UImanager::GetUIpointer();
     if (ui)
     {
-        G4UImanager *UImanager = G4UImanager::GetUIpointer();
+        runManager->Initialize();
         UImanager->ApplyCommand("/control/execute vis.mac");
         ui->SessionStart();
     }
     else
     {
         G4String command = "/control/execute ";
-        G4String fileName = argv[1];
-        UImanager->ApplyCommand(command + fileName);
+        UImanager->ApplyCommand(command + macroPath);
     }
     
-    //UImanager->ApplyCommand("/control/cout/ignoreThreadsExcept 0");
-    //UImanager->ApplyCommand("/event/verbose 0");
-    //UImanager->ApplyCommand("/tracking/verbose 0");
-    //UImanager->ApplyCommand("/run/verbose 2");
-    //UImanager->ApplyCommand("/control/verbose 2");
-    //UImanager->ApplyCommand("/run/printProgress 100");
-    //UImanager->ApplyCommand("/run/beamOn 1000");
     
-    //
     //job termination
     delete visManager;
     delete runManager;

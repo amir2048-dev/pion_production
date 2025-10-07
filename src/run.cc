@@ -2,65 +2,47 @@
 #include "event.hh"
 Run::Run(const SimConfig& cfg) : cfg_(cfg)
 {
-    ncompton=0;
-    nin=0;
-    nTransportation=0;
-    nconv=0;
-    nPhotoNuclear=0;
-    npiPosIn=0;
-    npiNegIn=0;
-    npiZerIn=0;
-    npiPosOut=0;
-    npiNegOut=0;
-    npiZerOut=0;
-    steps=0;
-    nPhot=0;
-    neventsOfPion=0;
-    npiPosInElas =0;
+    //spectra assignment
+	pionEnergyIn.assign(cfg_.energyBins, 0);
+	pionEnergyOut.assign(cfg_.energyBins, 0);
+	gammaEnergy.assign(cfg_.energyBins, 0);
+	//flunce absorber maps assignment
+	const int nA = cfg_.nAbsorberX * cfg_.nAbsorberZ;
+	pionFluenceAbs.assign(nA, 0.0);
+	eFluenceAbs.assign(nA, 0.0);
+	gammaFluenceAbs.assign(nA, 0.0);
+	gammaFluenceOver200Abs.assign(nA, 0.0);
+	gammaCreationAbs.assign(nA, 0.0);
+	//flunce world map assignment
+	const int nW = cfg_.nWorldX * cfg_.nWorldZ;
+	pionFluenceWorld.assign(nW, 0.0);		
 }
-
 void Run::Merge(const G4Run* aRun)
 {
 	
 	const Run* localRun = static_cast<const Run*>(aRun);
 	// mergeing all counters
-	nin +=localRun->nin;
-	ncompton +=localRun->ncompton;
-	nTransportation+=localRun->nTransportation;
-	nconv+=localRun->nconv;
-	nPhotoNuclear+=localRun->nPhotoNuclear;
 	npiPosIn+=localRun->npiPosIn;
-	npiNegIn+=localRun->npiNegIn;
-	npiZerIn+=localRun->npiZerIn;
 	npiPosOut+=localRun->npiPosOut;
-	npiNegOut+=localRun->npiNegOut;
-	npiZerOut+=localRun->npiZerOut;
 	steps+=localRun->steps;
-	nPhot+=localRun->nPhot;
-	neventsOfPion+=localRun->neventsOfPion;
-	npiPosInElas+=localRun->npiPosInElas;
 	// mergeing pion/e/gamma location in the absorber
-	for (int i=0;i<100;i++)
+	const G4int nA = cfg_.nAbsorberX * cfg_.nAbsorberZ;
+	for (int i=0;i<nA;i++)
 	{
-		for (int j=0;j<200;j++)
-		{
-			pionflux[i][j]+=localRun->pionflux[i][j];
-			eflux[i][j]+=localRun->eflux[i][j];
-			gammaflux[i][j]+=localRun->gammaflux[i][j];
-			gammacreation[i][j]+=localRun->gammacreation[i][j];
-			gammafluxover200[i][j]+=localRun->gammafluxover200[i][j];
-		}
+		pionFluenceAbs[i]+=localRun->pionFluenceAbs[i];
+		eFluenceAbs[i]+=localRun->eFluenceAbs[i];
+		gammaFluenceAbs[i]+=localRun->gammaFluenceAbs[i];
+		gammaFluenceOver200Abs[i]+=localRun->gammaFluenceOver200Abs[i];
+		gammaCreationAbs[i]+=localRun->gammaCreationAbs[i];
 	}
-	// mergeing pion location in the entire area
-	for (int i=0;i<500;i++)
+	// mergeing pion location in the world
+	const G4int nW = cfg_.nWorldX * cfg_.nWorldZ;
+	for (int i=0;i<nW;i++)
 	{
-		for (int j=0;j<1000;j++)
-		{
-			pionfluxlarge[i][j]+=localRun->pionfluxlarge[i][j];
-		}
+		pionFluenceWorld[i]+=localRun->pionFluenceWorld[i];
 	}
-	// mergeing energy distribuition of pion in/out and gamma 
-	for (int k=0;k<1000;k++)
+	// mergeing spectra of pion in/out and gamma 
+	for (int k=0;k<cfg_.energyBins;k++)
 	{
 		pionEnergyIn[k] += localRun->pionEnergyIn[k];
 		gammaEnergy[k] += localRun->gammaEnergy[k];

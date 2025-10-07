@@ -1,7 +1,100 @@
 #include "runAction.hh"
-#include <thread>
 #include <fstream>
+#include <iomanip>
+#include <filesystem>
+#include <sstream>
+#include <ctime>
+#include <chrono>
+#include "G4RunManager.hh"
+#include "G4SystemOfUnits.hh"
+#include "G4UnitsTable.hh"
+#include "G4Threading.hh"
 
+namespace
+{
+	inline void ensure_dir(const std::string& path)
+	{
+		std::error_code ec;
+		if (!std::filesystem::exists(path)) 
+		{
+			std::filesystem::create_directories(path, ec);
+		}
+		if (ec) 
+		{
+			G4cerr << "[RunAction] Failed to create dir: " << path << " : " << ec.message() << G4endl;
+		}
+  	}
+
+  	// write 1D vector as CSV 
+	template<typename T>
+	void write_csv_1d(const std::string& path, const std::vector<T>& v, double scale = 1.0) 
+	{
+		if (v.empty()) return;
+		std::ofstream ofs(path);
+		ofs.setf(std::ios::scientific, std::ios::floatfield);
+		ofs << std::setprecision(3);
+		for (std::size_t i = 0; i < v.size(); ++i)
+		{
+			if (i) ofs << ',';
+			ofs << (static_cast<double>(v[i]) * scale);
+		}
+		ofs << "\n";
+	}
+
+	// write flattened 2D (row-major) as CSV with nx columns, nz rows
+	template<typename T>
+	void write_csv_2d(const std::string& path, const std::vector<T>& data, int nx, int nz, double scale = 1.0) 
+	{
+		if (data.empty() || nx <= 0 || nz <= 0) return;
+		std::ofstream ofs(path);
+		ofs.setf(std::ios::scientific, std::ios::floatfield);
+		ofs << std::setprecision(3);
+		for (int iz = 0; iz < nz; ++iz)
+		{
+			const int rowOff = iz * nx;
+			for (int ix = 0; ix < nx; ++ix) 
+			{
+				if (ix) ofs << ',';
+				ofs << (static_cast<double>(data[rowOff + ix]) * scale);
+			}
+			ofs << "\n";
+		}
+	}
+	// YYYY-MM-DD (UTC)
+	inline std::string utc_date() 
+	{
+		std::time_t t = std::time(nullptr);
+		std::tm g{}; gmtime_r(&t, &g);
+		char buf[16];
+		std::strftime(buf, sizeof(buf), "%Y-%m-%d", &g);
+		return buf;
+    }
+	// HH-MM-SS (UTC)
+	inline std::string utc_time() 
+	{
+		std::time_t t = std::time(nullptr);
+		std::tm g{}; gmtime_r(&t, &g);
+		char buf[16];
+		std::strftime(buf, sizeof(buf), "%H-%M-%S", &g);
+		return buf;
+    }	
+	// Safe file copy
+  	inline void try_copy_file(const std::string& src, const std::string& dst) 
+	{
+		if (src.empty()) return;
+		std::error_code ec;
+		if (!std::filesystem::exists(src)) 
+		{
+			G4cerr << "[RunAction] Source file not found (skip copy): " << src << G4endl;
+			return;
+		}
+		std::filesystem::copy_file(src, dst,std::filesystem::copy_options::overwrite_existing, ec);
+		if (ec) 
+		{
+			G4cerr << "[RunAction] Copy failed: " << src << " -> " << dst << " : " << ec.message() << G4endl;
+		}
+    }
+}
 
 MyRunAction::~MyRunAction()
 {}
@@ -15,407 +108,136 @@ G4Run* MyRunAction::GenerateRun()
 
 void MyRunAction::BeginOfRunAction(const G4Run* run)
 {
-    
+	// Make folder: data/<YYYY-MM-DD>/<HH-MM-SS>+<runName>
+	date_ = utc_date();
+	timeStamp_  = utc_time();
+	runName_ = cfg_.runName.empty() ? "run" : cfg_.runName;
+	dateDir_ = cfg_.simOutDir + "/" + date_;
+	ensure_dir(cfg_.simOutDir);
+	ensure_dir(dateDir_);
+
+	stamp_  = timeStamp_ + "__" + runName_;
+	outDir_ = dateDir_ + "/" + stamp_;
+	ensure_dir(outDir_);
+
+	// Start timer
+	t0_ = std::chrono::steady_clock::now();
+
+	G4cout << "[RunAction] Output dir: " << outDir_ << G4endl;
 }
 void MyRunAction::EndOfRunAction(const G4Run* run)
 {
-    const Run* simRun = static_cast<const Run*>(run);
+    if (!IsMaster()) return;
+	const Run* simRun = static_cast<const Run*>(run);
+	// Stop timer
+	const auto t1 = std::chrono::steady_clock::now();
+	const auto dt = std::chrono::duration_cast<std::chrono::seconds>(t1 - t0_).count();
     
-    if (IsMaster())
+	try_copy_file(cfg_.cfgDir + "/" + cfg_.cfgFile , outDir_ + "/" + cfg_.cfgFile); // copy config file to output dir
+	try_copy_file(macroPath_, outDir_ + "/macro_used.mac"); // copy macro to output dir
+	
+    // normalization for fluence maps (path length / area), and optionally per-primary
+  	double scaleFluence = 1.0;
+  	if (cfg_.normalizeByArea)
     {
-    
-    
-
-    G4cout<< "in: " << simRun->nin << G4endl <<"Transportation: "<<simRun->nTransportation<< G4endl<< "compton:" << simRun->ncompton << G4endl << "conv: " << simRun->nconv << G4endl << "Photoelectric: " << simRun->nPhot <<    			   G4endl << "PhotoNuclear: " << simRun->nPhotoNuclear << G4endl
-    << "pi+ in absorber: "<< simRun->npiPosIn << G4endl << "pi- in absorber: "<< simRun->npiNegIn << G4endl << "pi0 in absorber: "<< simRun->npiZerIn << G4endl << "pion total in: "<< simRun->npiPosIn+simRun->npiNegIn+simRun->npiZerIn << G4endl 
-    << "pi+ out absorber: "<< simRun->npiPosOut << G4endl << "pi- out of absorber: "<< simRun->npiNegOut << G4endl << "pi0 out of absorber: "<< simRun->npiZerOut << G4endl << "pion total out: "<< simRun->npiPosOut+simRun->npiNegOut+simRun->npiZerOut << G4endl
-    << "events of pionproduction " << simRun->neventsOfPion << G4endl << "number of steps: " << simRun->steps << G4endl << "number of pi+ inelastic scatering" << simRun->npiPosInElas << G4endl;
-    
-    
-    
-    std::string folderName = "test"; 
-    std::string csvFilePath_pionflux = folderName + "/pionflux.csv";
-    int pionfluxold[100][200]={0};
-    std::ifstream csvFile_pionflux(csvFilePath_pionflux);
-    if (!csvFile_pionflux.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_pionflux.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_pionflux, line) && row < 100)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 200)
-		{
-		    // Convert the string to an integer
-		    pionfluxold[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_pionflux.close();
-    }
-    std::ofstream outputFile_pionflux(csvFilePath_pionflux);
-    for(int i = 0; i < 100; ++i)
-    	{
-        	for(int j = 0; j < 200; ++j)
-        	{
-    			outputFile_pionflux << simRun->pionflux[i][j] + pionfluxold[i][j] << ",";
-        	}
-        	outputFile_pionflux << "\n";
-
-        }   
-    outputFile_pionflux.close();
-    
-    
-    
- std::string csvFilePath_pionfluxlarge = folderName + "/pionfluxlarge.csv";
-    int pionfluxlargeold[500][1000]={0};
-    std::ifstream csvFile_pionfluxlarge(csvFilePath_pionfluxlarge);
-    if (!csvFile_pionfluxlarge.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_pionfluxlarge.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_pionfluxlarge, line) && row < 500)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 1000)
-		{
-		    // Convert the string to an integer
-		    pionfluxlargeold[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_pionfluxlarge.close();
-    }
-    std::ofstream outputFile_pionfluxlarge(csvFilePath_pionfluxlarge);
-    for(int i = 0; i < 500; ++i)
-    	{
-        	for(int j = 0; j < 1000; ++j)
-        	{
-    			outputFile_pionfluxlarge << simRun->pionfluxlarge[i][j] + pionfluxlargeold[i][j] << ",";
-        	}
-        	outputFile_pionfluxlarge << "\n";
-
-        }   
-    outputFile_pionfluxlarge.close();
-     
-    
-    
-    std::string csvFilePath_eflux = folderName + "/eflux.csv";
-    int efluxold[100][200]={0};
-    std::ifstream csvFile_eflux(csvFilePath_eflux);
-    if (!csvFile_eflux.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_eflux.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_eflux, line) && row < 100)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 200)
-		{
-		    // Convert the string to an integer
-		    efluxold[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_eflux.close();
-    }
-    std::ofstream outputFile_eflux(csvFilePath_eflux);
-    for(int i = 0; i < 100; ++i)
-    	{
-        	for(int j = 0; j < 200; ++j)
-        	{
-    			outputFile_eflux << simRun->eflux[i][j] + efluxold[i][j] << ",";
-        	}
-        	outputFile_eflux << "\n";
-
-        }   
-    outputFile_eflux.close();
-    
-    
-    std::string csvFilePath_gammaflux = folderName + "/gammaflux.csv";
-    int gammafluxold[100][200]={0};
-    std::ifstream csvFile_gammaflux(csvFilePath_gammaflux);
-    if (!csvFile_gammaflux.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_gammaflux.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_gammaflux, line) && row < 100)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 200)
-		{
-		    // Convert the string to an integer
-		    gammafluxold[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_gammaflux.close();
-    }
-    std::ofstream outputFile_gammaflux(csvFilePath_gammaflux);
-    for(int i = 0; i < 100; ++i)
-    	{
-        	for(int j = 0; j < 200; ++j)
-        	{
-    			outputFile_gammaflux << simRun->gammaflux[i][j] + gammafluxold[i][j] << ",";
-        	}
-        	outputFile_gammaflux << "\n";
-
-        }   
-    outputFile_gammaflux.close();
-    
-    std::string csvFilePath_gammacreation = folderName + "/gammacreation.csv";
-    int gammacreationold[100][200]={0};
-    std::ifstream csvFile_gammacreation(csvFilePath_gammacreation);
-    if (!csvFile_gammacreation.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_gammacreation.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_gammacreation, line) && row < 100)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 200)
-		{
-		    // Convert the string to an integer
-		    gammacreationold[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_gammacreation.close();
-    }
-    std::ofstream outputFile_gammacreation(csvFilePath_gammacreation);
-    for(int i = 0; i < 100; ++i)
-    	{
-        	for(int j = 0; j < 200; ++j)
-        	{
-    			outputFile_gammacreation << simRun->gammacreation[i][j] + gammacreationold[i][j] << ",";
-        	}
-        	outputFile_gammacreation << "\n";
-
-        }   
-    outputFile_gammacreation.close();
-    
-    
-    std::string csvFilePath_gammafluxover200 = folderName + "/gammafluxover200.csv";
-    int gammafluxover200old[100][200]={0};
-    std::ifstream csvFile_gammafluxover200(csvFilePath_gammafluxover200);
-    if (!csvFile_gammafluxover200.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_gammafluxover200.peek() != std::ifstream::traits_type::eof()) 
-    {
-	    
-	    
-	    std::string line;
-	    int row = 0;
-	    while (getline(csvFile_gammafluxover200, line) && row < 100)
-	     {
-		std::stringstream ss(line);
-		std::string cell;
-		int col = 0;
-
-		while (getline(ss, cell, ',') && col < 200)
-		{
-		    // Convert the string to an integer
-		    gammafluxover200old[row][col] = std::stoi(cell);
-		    col++;
-		}
-		
-		row++;
-	    }
-
-	    // Close the file
-	    csvFile_gammafluxover200.close();
-    }
-    std::ofstream outputFile_gammafluxover200(csvFilePath_gammafluxover200);
-    for(int i = 0; i < 100; ++i)
-    	{
-        	for(int j = 0; j < 200; ++j)
-        	{
-    			outputFile_gammafluxover200 << simRun->gammafluxover200[i][j] + gammafluxover200old[i][j] << ",";
-        	}
-        	outputFile_gammafluxover200 << "\n";
-
-        }   
-    outputFile_gammafluxover200.close();
-    
-    
-    std::string csvFilePath_in = folderName + "/pion_energy_in.csv";
-    std::string csvFilePath_out = folderName + "/pion_energy_out.csv";
-    std::string csvFilePath_gamma = folderName + "/gamma_energy_in.csv";
-    int energy_in[1000]={0};
-    int energy_out[1000]={0};
-    int energy_gamma[1000]={0};
-    G4cout<< "file opend" << G4endl;
-    std::ifstream csvFile_in(csvFilePath_in);
-    if (!csvFile_in.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-   
-    if (csvFile_in.peek() != std::ifstream::traits_type::eof()) 
-    {
-    	std::string line;
-	getline(csvFile_in, line);
-	std::stringstream ss(line);
-	std::string cell;
-	int col = 0;
-
-	while (getline(ss, cell, ',') && col < 1000)
-	{
-	    // Convert the string to an integer
-	    energy_in[col] = std::stoi(cell);
-	    col++;
+    	const double area_mm2 = (cfg_.pixelX / mm) * (cfg_.pixelZ / mm); // numeric mm^2
+    	if (area_mm2 > 0.0) scaleFluence /= area_mm2;                    // length(mm)/area(mm^2) => 1/mm
 	}
-	    // Close the file
-	    csvFile_in.close();
-    }
-    G4cout << "file cloesd" << G4endl;
-    std::ifstream csvFile_out(csvFilePath_out);
-     if (!csvFile_out.is_open()) 
-    {
-	std::cerr << "Failed to open input.csv" << std::endl;
-    }
-    if (csvFile_out.peek() != std::ifstream::traits_type::eof()) 
-    {
-    	std::string line;
-	getline(csvFile_out, line);
-	std::stringstream ss(line);
-	std::string cell;
-	int col = 0;
-
-	while (getline(ss, cell, ',') && col < 1000)
+  	if (cfg_.normalizePerPrimary)
 	{
-	    // Convert the string to an integer
-	    energy_out[col] = std::stoi(cell);
-	    col++;
-	    
-	}
-	    // Close the file
-	csvFile_out.close();
-    }
-    std::ifstream csvFile_gamma(csvFilePath_gamma);
-     if (!csvFile_gamma.is_open()) 
-    {
-	std::cerr << "Failed to open gamma energy" << std::endl;
-    }
-    if (csvFile_gamma.peek() != std::ifstream::traits_type::eof()) 
-    {
-    	std::string line;
-	getline(csvFile_gamma, line);
-	std::stringstream ss(line);
-	std::string cell;
-	int col = 0;
-
-	while (getline(ss, cell, ',') && col < 1000)
+    	const auto N = 1;//simRun->GetNumberOfEvent();// ADD FUNCTION TO GET NUMBER OF EVENTS
+    	if (N > 0) scaleFluence /= static_cast<double>(N);
+  	}
+	if (cfg_.runPiPlusMain)
 	{
-	    // Convert the string to an integer
-	    energy_gamma[col] = std::stoi(cell);
-	    col++;
-	    
+		 // spectra
+    	write_csv_1d(outDir_ + "/pion_energy_in.csv",  simRun->pionEnergyIn);
+    	write_csv_1d(outDir_ + "/pion_energy_out.csv", simRun->pionEnergyOut);
+
+		// absorber-local pion fluence
+		write_csv_2d(outDir_ + "/pion_fluence_abs.csv",
+					simRun->pionFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+
+		// optional world-wide map (write only if the vector is non-empty) ADD OPTION TO CFG
+		if (!simRun->pionFluenceWorld.empty())
+		write_csv_2d(outDir_ + "/pion_fluence_world.csv", simRun->pionFluenceWorld, cfg_.nWorldX, cfg_.nWorldZ, scaleFluence);
 	}
-	    // Close the file
-	csvFile_gamma.close();
-    }
-    std::ofstream outputFile_in(csvFilePath_in);
-    for(int i = 0; i < 1000; ++i)
-    	{
-    		outputFile_in << simRun->pionEnergyIn[i] + energy_in[i] << ",";
-    		
-        }   
-    outputFile_in.close();
-    std::ofstream outputFile_out(csvFilePath_out);
-    for(int i = 0; i < 1000; ++i)
-    	{
-    		outputFile_out << simRun->pionEnergyOut[i] + energy_out[i] << ",";
-    		
-        }   
-    outputFile_out.close();
-    std::ofstream outputFile_gamma(csvFilePath_gamma);
-    for(int i = 0; i < 1000; ++i)
-    	{
-    		outputFile_gamma << simRun->gammaEnergy[i] + energy_gamma[i] << ",";
-    		
-        }   
-    outputFile_out.close();
-    
-  
-    G4cout
-     << G4endl
-     << "--------------------End of Global Run-----------------------"
-     << G4endl
-     << "  The run was " << simRun->nin << " events ";
-  }
-    //    // save histograms & ntuple
-    //    //
-    //    analysisManager->Write();
-    //    analysisManager->CloseFile();
-    //
+	// Converter stats (electrons/gammas)
+ 	if (cfg_.runConvStats)
+   	{
+		// gamma spectrum inside absorber (your “gamma_energy_in”)
+		write_csv_1d(outDir_ + "/gamma_energy_in.csv", simRun->gammaEnergy);
+
+		// absorber-local fluence maps for e- and gamma
+		write_csv_2d(outDir_ + "/e_fluence_abs.csv",
+					simRun->eFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+
+		write_csv_2d(outDir_ + "/gamma_fluence_abs.csv",
+					simRun->gammaFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+
+		write_csv_2d(outDir_ + "/gamma_fluence_over200_abs.csv",
+					simRun->gammaFluenceOver200Abs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+
+		// NEED TO UPDATE TO ADD GAMMA CREATION LOCATION
+		write_csv_2d(outDir_ + "/gamma_creation_abs.csv", simRun->gammaCreationAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+  	}
+
+	std::ofstream txt(outDir_ + "/results.txt");
+    txt.setf(std::ios::scientific, std::ios::floatfield);
+    txt << std::setprecision(1);
+
+    // Header
+    txt << "Run folder: " << stamp_ << "\n";
+    txt << "Date      : " << date_ << "\n\n";
+
+    // From cfg
+    txt << "[Config]\n";
+    txt << "  run name           : " << runName_ << "\n";
+    txt << "  run Description    : " << cfg_.runDescription << "\n";
+    txt << "  world (half, cm)   : "
+        << (cfg_.worldX/cm) << " x " << (cfg_.worldY/cm) << " x " << (cfg_.worldZ/cm) << "\n";
+    txt << "  absorber(half, cm) : "
+        << (cfg_.absorberX/cm) << " x " << (cfg_.absorberY/cm) << " x " << (cfg_.absorberZ/cm) << "\n";
+    txt << "  field strength (T) : " << (cfg_.fieldZ/tesla) << "\n";
+    // TODO: field location (add to SimConfig later)
+    // txt << "  field location    : " << cfg_.fieldLocation << "\n";
+    txt << "  pixel (mm)         : " << (cfg_.pixelX/mm) << " x " << (cfg_.pixelZ/mm) << "\n";
+    // TODO: generator params (add to SimConfig later)
+    // txt << "  generator params  : " << cfg_.generatorDesc << "\n";
+    txt << "\n";
+
+    // From macro (runtime parameters)
+    txt << "[Macro]\n";
+    txt << "  number of runs (N) : " << run->GetNumberOfEvent() << "\n";
+    txt << "  number of threads  : " << G4RunManager::GetRunManager()->GetNumberOfThreads() << "\n";
+    if (!macroPath_.empty())
+      txt << "  macro file       : " << macroPath_ << "\n";
+    txt << "\n";
+
+    // From simulation counters
+    txt << "[Results]\n";
+    txt << "  pi+ in absorber    : " << simRun->npiPosIn << "\n";
+    txt << "  pi+ outside world  : " << simRun->npiPosOut << "\n";
+    txt << "\n";
+
+    // Timing
+    const auto nEvt = static_cast<double>(run->GetNumberOfEvent());
+    const double perEvt = (nEvt > 0.0) ? (dt / nEvt) : 0.0;
+    txt << "[Timing]\n";
+    txt << "  runtime (s)        : " << dt << "\n";
+    txt << "  runtime per run (s): " << perEvt << "\n";
+    txt << "\n";
+
+
+
+	G4cout
+    << "\n----- End of Run (master) -----\n"
+	<< "  Output dir       : " << outDir_ << "\n"
+    << "  pi+ in absorber  : " << simRun->npiPosIn  << "\n"
+    << "  pi+ out world    : " << simRun->npiPosOut << "\n"
+	<< "  Run time (s)     : " << dt                << "\n"
+    << "  total steps      : " << simRun->steps     << "\n"
+    << "------------------------------\n" << G4endl;
     
 }
 

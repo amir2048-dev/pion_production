@@ -11,13 +11,13 @@
 class MyActionInitialization : public G4VUserActionInitialization
 {
 public: 
-	MyActionInitialization(const SimConfig& cfg): cfg_(cfg) {};
+	MyActionInitialization(const SimConfig& cfg, std::string macroPath = {}): cfg_(cfg), macroPath_(std::move(macroPath)) {};
 	~MyActionInitialization();
 	void Build() const override;
 	void BuildForMaster() const override;
 private:
 	const SimConfig& cfg_;
-	
+	std::string macroPath_;
 };
 
 
