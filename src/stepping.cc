@@ -152,9 +152,9 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
                    fRunAction->fRun->pionFluenceAbs[k] += lenCell;
 				 }
                });
-			if (false)
+			if (cfg_.runWorldMap)
 			{
-				raycastAccumulateXZ(p0, p1, cfg_.pixelX, cfg_.pixelZ, cfg_.nWorldX, cfg_.nWorldZ,
+				raycastAccumulateXZ(p0, p1, cfg_.worldPixelX, cfg_.worldPixelZ, cfg_.nWorldX, cfg_.nWorldZ,
                cfg_.worldXOrigin, cfg_.worldZOrigin,
                [&](int ix, int iz, double lenCell){
                  if (0<=ix && ix<cfg_.nWorldX && 0<=iz && iz<cfg_.nWorldZ)

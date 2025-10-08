@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <sstream>
 #include <ctime>
-#include <chrono>
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4UnitsTable.hh"
@@ -40,26 +39,27 @@ namespace
 		}
 		ofs << "\n";
 	}
-
-	// write flattened 2D (row-major) as CSV with nx columns, nz rows
+	// write 2D vector as CSV nx rows, nz columns
+	// data is in row-major order: data[iz * nx + ix]
+	// scale is a multiplicative factor applied to each element (e.g. for unit conversion)
 	template<typename T>
-	void write_csv_2d(const std::string& path, const std::vector<T>& data, int nx, int nz, double scale = 1.0) 
+	void write_csv_2d(const std::string& path, const std::vector<T>& data, int nx, int nz, double scale = 1.0)
 	{
-		if (data.empty() || nx <= 0 || nz <= 0) return;
-		std::ofstream ofs(path);
-		ofs.setf(std::ios::scientific, std::ios::floatfield);
-		ofs << std::setprecision(3);
-		for (int iz = 0; iz < nz; ++iz)
-		{
-			const int rowOff = iz * nx;
-			for (int ix = 0; ix < nx; ++ix) 
-			{
-				if (ix) ofs << ',';
-				ofs << (static_cast<double>(data[rowOff + ix]) * scale);
-			}
-			ofs << "\n";
-		}
-	}
+    	if (data.size() != static_cast<size_t>(nx) * static_cast<size_t>(nz) || nx <= 0 || nz <= 0) return;
+
+    	std::ofstream ofs(path);
+    	ofs.setf(std::ios::scientific, std::ios::floatfield);
+    	ofs << std::setprecision(3);
+
+    // Outer: x (rows). Inner: z (columns, left->right).
+    for (int ix = 0; ix < nx; ++ix) {
+        for (int iz = 0; iz < nz; ++iz) {
+            if (iz) ofs << ',';
+            ofs << (static_cast<double>(data[iz * nx + ix]) * scale);
+        }
+        ofs << '\n';
+    }
+}
 	// YYYY-MM-DD (UTC)
 	inline std::string utc_date() 
 	{
@@ -121,8 +121,7 @@ void MyRunAction::BeginOfRunAction(const G4Run* run)
 	ensure_dir(outDir_);
 
 	// Start timer
-	t0_ = std::chrono::steady_clock::now();
-
+    myTimer_.Start(); 
 	G4cout << "[RunAction] Output dir: " << outDir_ << G4endl;
 }
 void MyRunAction::EndOfRunAction(const G4Run* run)
@@ -130,23 +129,33 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     if (!IsMaster()) return;
 	const Run* simRun = static_cast<const Run*>(run);
 	// Stop timer
-	const auto t1 = std::chrono::steady_clock::now();
-	const auto dt = std::chrono::duration_cast<std::chrono::seconds>(t1 - t0_).count();
+	myTimer_.Stop();
+	const double dt = myTimer_.GetRealElapsed();
     
 	try_copy_file(cfg_.cfgDir + "/" + cfg_.cfgFile , outDir_ + "/" + cfg_.cfgFile); // copy config file to output dir
 	try_copy_file(macroPath_, outDir_ + "/macro_used.mac"); // copy macro to output dir
 	
     // normalization for fluence maps (path length / area), and optionally per-primary
   	double scaleFluence = 1.0;
+	double scaleFluenceWorld = 1.0;
   	if (cfg_.normalizeByArea)
     {
     	const double area_mm2 = (cfg_.pixelX / mm) * (cfg_.pixelZ / mm); // numeric mm^2
     	if (area_mm2 > 0.0) scaleFluence /= area_mm2;                    // length(mm)/area(mm^2) => 1/mm
+		if (cfg_.runWorldMap)
+		{
+			const double areaWorld_mm2 = (cfg_.worldPixelX / mm) * (cfg_.worldPixelZ / mm); // numeric mm^2
+			if (areaWorld_mm2 > 0.0) scaleFluenceWorld /= areaWorld_mm2;                    // length(mm)/area(mm^2) => 1/mm
+		}
 	}
   	if (cfg_.normalizePerPrimary)
 	{
-    	const auto N = 1;//simRun->GetNumberOfEvent();// ADD FUNCTION TO GET NUMBER OF EVENTS
+    	const auto N = run->GetNumberOfEvent();
     	if (N > 0) scaleFluence /= static_cast<double>(N);
+		if (cfg_.runWorldMap)
+		{
+			if (N > 0) scaleFluenceWorld /= static_cast<double>(N);
+		}
   	}
 	if (cfg_.runPiPlusMain)
 	{
@@ -160,7 +169,7 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 
 		// optional world-wide map (write only if the vector is non-empty) ADD OPTION TO CFG
 		if (!simRun->pionFluenceWorld.empty())
-		write_csv_2d(outDir_ + "/pion_fluence_world.csv", simRun->pionFluenceWorld, cfg_.nWorldX, cfg_.nWorldZ, scaleFluence);
+		write_csv_2d(outDir_ + "/pion_fluence_world.csv", simRun->pionFluenceWorld, cfg_.nWorldX, cfg_.nWorldZ, scaleFluenceWorld);
 	}
 	// Converter stats (electrons/gammas)
  	if (cfg_.runConvStats)
@@ -226,6 +235,9 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     txt << "[Timing]\n";
     txt << "  runtime (s)        : " << dt << "\n";
     txt << "  runtime per run (s): " << perEvt << "\n";
+	txt << "  system time (s)    : " << myTimer_.GetSystemElapsed() << "\n";
+	txt << "  user time (s)      : " << myTimer_.GetUserElapsed() << "\n";
+	txt << "  cpu efficiency (%) : " << (100.0 * (myTimer_.GetUserElapsed()+myTimer_.GetSystemElapsed() )/ dt) << "\n";
     txt << "\n";
 
 

@@ -5,6 +5,7 @@
 #include "G4UserRunAction.hh"
 #include "SimConfig.hh"
 #include "run.hh"
+#include "G4Timer.hh"
 
 class MyRunAction : public G4UserRunAction
 {
@@ -19,7 +20,7 @@ public:
 private:
 	const SimConfig& cfg_;
 	std::string macroPath_;
-	std::chrono::steady_clock::time_point t0_;
+	G4Timer myTimer_;
 	std::string outDir_;
 	std::string dateDir_;
 	std::string date_;
