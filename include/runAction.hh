@@ -19,6 +19,7 @@ public:
 	void SetMacroPath(const std::string& path) { macroPath_ = path; }
 private:
 	const SimConfig& cfg_;
+	G4double spectrumNorm_ = 1.0;
 	std::string macroPath_;
 	G4Timer myTimer_;
 	std::string outDir_;

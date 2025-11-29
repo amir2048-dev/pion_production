@@ -6,6 +6,7 @@ Run::Run(const SimConfig& cfg) : cfg_(cfg)
 	pionEnergyIn.assign(cfg_.energyBins, 0);
 	pionEnergyOut.assign(cfg_.energyBins, 0);
 	gammaEnergy.assign(cfg_.energyBins, 0);
+	genratorEnergy.assign(cfg_.energyBins, 0);
 	//flunce absorber maps assignment
 	const int nA = cfg_.nAbsorberX * cfg_.nAbsorberZ;
 	pionFluenceAbs.assign(nA, 0.0);
@@ -16,6 +17,9 @@ Run::Run(const SimConfig& cfg) : cfg_(cfg)
 	//flunce world map assignment
 	const int nW = cfg_.nWorldX * cfg_.nWorldZ;
 	pionFluenceWorld.assign(nW, 0.0);		
+	//genrator beam map assignment
+	const int nB = cfg_.nAbsorberX * cfg_.nAbsorberY;
+	genratorBeamXY.assign(nB, 0.0);
 }
 void Run::Merge(const G4Run* aRun)
 {
@@ -41,13 +45,19 @@ void Run::Merge(const G4Run* aRun)
 	{
 		pionFluenceWorld[i]+=localRun->pionFluenceWorld[i];
 	}
-	// mergeing spectra of pion in/out and gamma 
+	// mergeing genrator beam distribution in the X-Y plane of the absorber
+	const G4int nB = cfg_.nAbsorberX * cfg_.nAbsorberY;
+	for (int i=0;i<nB;i++)
+	{
+		genratorBeamXY[i]+=localRun->genratorBeamXY[i];
+	}
+	// mergeing spectra of pion in/out and gamma and genrator energy
 	for (int k=0;k<cfg_.energyBins;k++)
 	{
 		pionEnergyIn[k] += localRun->pionEnergyIn[k];
 		gammaEnergy[k] += localRun->gammaEnergy[k];
 		pionEnergyOut[k] += localRun->pionEnergyOut[k];
-	
+		genratorEnergy[k] += localRun->genratorEnergy[k];
 	}
 	
 	G4Run::Merge(aRun);

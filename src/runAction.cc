@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <sstream>
 #include <ctime>
+#include <cmath>
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4UnitsTable.hh"
@@ -94,6 +95,24 @@ namespace
 			G4cerr << "[RunAction] Copy failed: " << src << " -> " << dst << " : " << ec.message() << G4endl;
 		}
     }
+	// Compute normalization factor for Maxwell-like spectrum with low-energy cutoff
+	inline G4double ComputeSpectrumNormFactor(const SimConfig& cfg)
+	{
+		if (cfg.EminCutoff <= 0.)
+			return 1.0;
+
+		const G4double a  = cfg.EminCutoff / cfg.Tmaxwell; // dimensionless
+		const G4double s  = std::sqrt(a);
+
+		// F_below = erf(s) - 2/sqrt(pi)*s*exp(-a)
+		const G4double F_below = std::erf(s) - (2.0 / std::sqrt(CLHEP::pi)) * s * std::exp(-a);
+
+		G4double frac_above = 1.0 - F_below;
+		if (frac_above <= 0.0) 
+			return 1.0; // extreme cutoff, avoid blow-up
+
+		return 1.0 / frac_above;
+	}
 }
 
 MyRunAction::~MyRunAction()
@@ -123,10 +142,14 @@ void MyRunAction::BeginOfRunAction(const G4Run* run)
 	// Start timer
     myTimer_.Start(); 
 	G4cout << "[RunAction] Output dir: " << outDir_ << G4endl;
+	// Compute spectrum normalization factor
+	spectrumNorm_ = ComputeSpectrumNormFactor(cfg_);
 }
 void MyRunAction::EndOfRunAction(const G4Run* run)
 {
     if (!IsMaster()) return;
+	 const G4int N_sim = run->GetNumberOfEvent();     // actually simulated
+    const G4double N_phys = N_sim * spectrumNorm_;    // effective ones
 	const Run* simRun = static_cast<const Run*>(run);
 	// Stop timer
 	myTimer_.Stop();
@@ -150,18 +173,17 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 	}
   	if (cfg_.normalizePerPrimary)
 	{
-    	const auto N = run->GetNumberOfEvent();
-    	if (N > 0) scaleFluence /= static_cast<double>(N);
+    	if (N_phys > 0) scaleFluence /= static_cast<double>(N_phys);
 		if (cfg_.runWorldMap)
 		{
-			if (N > 0) scaleFluenceWorld /= static_cast<double>(N);
+			if (N_phys > 0) scaleFluenceWorld /= static_cast<double>(N_phys);
 		}
   	}
 	if (cfg_.runPiPlusMain)
 	{
 		 // spectra
-    	write_csv_1d(outDir_ + "/pion_energy_in.csv",  simRun->pionEnergyIn);
-    	write_csv_1d(outDir_ + "/pion_energy_out.csv", simRun->pionEnergyOut);
+    	write_csv_1d(outDir_ + "/pion_energy_in.csv",  simRun->pionEnergyIn, spectrumNorm_);
+    	write_csv_1d(outDir_ + "/pion_energy_out.csv", simRun->pionEnergyOut,spectrumNorm_);
 
 		// absorber-local pion fluence
 		write_csv_2d(outDir_ + "/pion_fluence_abs.csv",
@@ -175,21 +197,26 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
  	if (cfg_.runConvStats)
    	{
 		// gamma spectrum inside absorber (your “gamma_energy_in”)
-		write_csv_1d(outDir_ + "/gamma_energy_in.csv", simRun->gammaEnergy);
+		write_csv_1d(outDir_ + "/gamma_energy_in.csv", simRun->gammaEnergy, spectrumNorm_);
 
 		// absorber-local fluence maps for e- and gamma
-		write_csv_2d(outDir_ + "/e_fluence_abs.csv",
-					simRun->eFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+		write_csv_2d(outDir_ + "/e_fluence_abs.csv", simRun->eFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
 
-		write_csv_2d(outDir_ + "/gamma_fluence_abs.csv",
-					simRun->gammaFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+		write_csv_2d(outDir_ + "/gamma_fluence_abs.csv", simRun->gammaFluenceAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
 
-		write_csv_2d(outDir_ + "/gamma_fluence_over200_abs.csv",
-					simRun->gammaFluenceOver200Abs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
+		write_csv_2d(outDir_ + "/gamma_fluence_over200_abs.csv", simRun->gammaFluenceOver200Abs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
 
-		// NEED TO UPDATE TO ADD GAMMA CREATION LOCATION
 		write_csv_2d(outDir_ + "/gamma_creation_abs.csv", simRun->gammaCreationAbs, cfg_.nAbsorberX, cfg_.nAbsorberZ, scaleFluence);
   	}
+	if (cfg_.runDebug)
+	{
+		// genrator beam distribution in the X-Y plane of the absorber
+		write_csv_2d(outDir_ + "/genrator_beam_xy.csv", simRun->genratorBeamXY, cfg_.nAbsorberX, cfg_.nAbsorberY);
+		// genrator energy histogram
+		write_csv_1d(outDir_ + "/genrator_energy.csv", simRun->genratorEnergy);
+	}
+	
+	// Write results.txt summary
 
 	std::ofstream txt(outDir_ + "/results.txt");
     txt.setf(std::ios::scientific, std::ios::floatfield);
@@ -211,13 +238,28 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     // TODO: field location (add to SimConfig later)
     // txt << "  field location    : " << cfg_.fieldLocation << "\n";
     txt << "  pixel (mm)         : " << (cfg_.pixelX/mm) << " x " << (cfg_.pixelZ/mm) << "\n";
-    // TODO: generator params (add to SimConfig later)
-    // txt << "  generator params  : " << cfg_.generatorDesc << "\n";
+    txt << "  primary particle    : " << cfg_.gunParticle << "\n";
+	if (cfg_.beamModel == SimConfig::BeamModel::TopHatDisk)
+		txt << "  beam model         : TopHatDisk (radius = " << (cfg_.beamRadius/mm) << " mm)\n";
+	else if (cfg_.beamModel == SimConfig::BeamModel::Gaussian)
+		txt << "  beam model         : Gaussian (sigma = " << (cfg_.beamSigma/mm) << " mm)\n";
+	else
+		txt << "  beam model         : Unknown\n";
+	if (cfg_.energyModel == SimConfig::EnergyModel::Mono)
+		txt << "  energy model      : Mono (E = " << (cfg_.Emono/MeV) << " MeV)\n";
+	else if (cfg_.energyModel == SimConfig::EnergyModel::Uniform)
+		txt << "  energy model      : Uniform (E = " << (cfg_.EunifMin/MeV) << " .. " << (cfg_.Emax/MeV) << " MeV)\n";
+	else if (cfg_.energyModel == SimConfig::EnergyModel::MaxwellLike)
+		txt << "  energy model      : Maxwell-like (T = " << (cfg_.Tmaxwell/MeV) << " MeV, Emin cutoff = " << (cfg_.EminCutoff/MeV) << " MeV)\n";
+	else
+		txt << "  energy model      : Unknown\n";
+
     txt << "\n";
 
     // From macro (runtime parameters)
     txt << "[Macro]\n";
-    txt << "  number of runs (N) : " << run->GetNumberOfEvent() << "\n";
+    txt << "  number of runs (N) : " << N_sim << "\n";
+	txt << "  effective number of runs (N_phys for Emin = " << cfg_.EminCutoff << " MeV )    : " << N_phys << "\n";
     txt << "  number of threads  : " << G4RunManager::GetRunManager()->GetNumberOfThreads() << "\n";
     if (!macroPath_.empty())
       txt << "  macro file       : " << macroPath_ << "\n";
@@ -230,7 +272,7 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     txt << "\n";
 
     // Timing
-    const auto nEvt = static_cast<double>(run->GetNumberOfEvent());
+    const auto nEvt = static_cast<double>(N_sim);
     const double perEvt = (nEvt > 0.0) ? (dt / nEvt) : 0.0;
     txt << "[Timing]\n";
     txt << "  runtime (s)        : " << dt << "\n";

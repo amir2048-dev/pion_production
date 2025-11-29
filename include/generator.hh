@@ -7,16 +7,18 @@
 #include "G4ParticleTable.hh"
 #include "G4ThreeVector.hh"
 #include "SimConfig.hh"
+#include "runAction.hh"
 
 class MyPrimaryGenerator : public G4VUserPrimaryGeneratorAction
 {
 public:
-	MyPrimaryGenerator(const SimConfig& cfg);
+	MyPrimaryGenerator(const SimConfig& cfg, MyRunAction* runAction);
 	~MyPrimaryGenerator();
 	virtual void GeneratePrimaries(G4Event*);
 
 private: 
 	G4ParticleGun* particleGun_ = nullptr;
+	MyRunAction* runAction_ = nullptr;
 	const SimConfig& cfg_;
 	// samplers
   	G4ThreeVector samplePositionXY_() const;   // transverse spot at gun Z

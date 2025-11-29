@@ -10,7 +10,7 @@ inline double f_shape(double E, double T)
     return std::sqrt(E) * std::pow(T, -1.5) * std::exp(-E / T);
 }
 
-MyPrimaryGenerator::MyPrimaryGenerator(const SimConfig& cfg): cfg_(cfg)
+MyPrimaryGenerator::MyPrimaryGenerator(const SimConfig& cfg, MyRunAction* runAction ): cfg_(cfg), runAction_(runAction)
 {
 	particleGun_ = new G4ParticleGun(1);
 	
@@ -38,14 +38,36 @@ MyPrimaryGenerator::~MyPrimaryGenerator()
 
 void MyPrimaryGenerator::GeneratePrimaries(G4Event *anEvent)
 {
+	// Sample position in X/Y at gun Z
 	const auto xy = samplePositionXY_();
   	const auto gunPos = G4ThreeVector(cfg_.gunPos.x() + xy.x(), cfg_.gunPos.y() + xy.y(), cfg_.gunPos.z());
   	particleGun_->SetParticlePosition(gunPos);
 
-	// Sample energy (apply cutoff + model + scale)
+	// increment generator beam histogram
+	const auto x = gunPos.x();
+	const auto y = gunPos.y();
+
+	// map to indices with world origin at (x0,y0)
+	const double gx = (x - cfg_.gunPos.x()) / cfg_.pixelX + 0.5 * cfg_.nAbsorberX;
+	const double gy = (y - cfg_.gunPos.y()) / cfg_.pixelY + 0.5 * cfg_.nAbsorberY;
+	int ix = static_cast<int>(std::floor(gx));
+	int iy = static_cast<int>(std::floor(gy));
+
+	if (0 <= ix && ix < cfg_.nAbsorberX && 0 <= iy && iy < cfg_.nAbsorberY)
+	{
+		const int k = runAction_->fRun->BeamIndex(ix, iy);
+		runAction_->fRun->genratorBeamXY[k] += 1.0;   // count primaries per pixel
+	}
+	
+	// Sample energy (apply cutoff + model)
   	G4double E = sampleEnergy_();
-  	E *= cfg_.energyScale;
   	particleGun_->SetParticleEnergy(E);
+	// increment generator energy histogram
+	int bin = static_cast<int>(E / MeV + 0.5);
+	if (bin < 0) bin = 0;
+	if (bin >= cfg_.energyBins) bin = cfg_.energyBins - 1;
+	runAction_->fRun->genratorEnergy[bin]++;
+
   	particleGun_->GeneratePrimaryVertex(anEvent);
 }
 G4ThreeVector MyPrimaryGenerator::samplePositionXY_() const

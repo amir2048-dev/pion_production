@@ -19,6 +19,7 @@ public:
   	std::vector<G4int> pionEnergyIn;   // size = cfg_.energyBins
   	std::vector<G4int> pionEnergyOut;  // size = cfg_.energyBins
   	std::vector<G4int> gammaEnergy;    // size = cfg_.energyBins
+	std::vector<G4int> genratorEnergy; // size = cfg_.energyBins
 	// fluence maps (accumulate path length)
 	// absorber-local grids (X–Z)
 	std::vector<double> pionFluenceAbs;        // length sum per cell
@@ -28,10 +29,14 @@ public:
 	std::vector<double> gammaCreationAbs;      // if you want path length of "created" gammas' first step; or drop if not meaningful
 	// world grid (X–Z)
 	std::vector<double> pionFluenceWorld;
+	
+	// genrator beam grid (X-Y)
+	std::vector<double> genratorBeamXY;
 
 	// flatteners
   	inline int AbsIndex(int ix, int iz)   const { return ix + iz * cfg_.nAbsorberX; }
   	inline int WorldIndex(int ix, int iz) const { return ix + iz * cfg_.nWorldX;   }
+	inline int BeamIndex(int ix, int iy)  const { return ix + iy * cfg_.nAbsorberX;   }
 
 	
 private:

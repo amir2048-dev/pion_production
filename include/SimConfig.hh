@@ -60,15 +60,14 @@ struct SimConfig
     G4double Tmaxwell   = 147.28 * MeV;  // scale in your current sampler
     G4double EminCutoff = 200.0 * MeV;   // hard low-cut
 
-    // optional energy rescale factor (1.0 = no change)
-    G4double energyScale = 1.0;
-
     //absorber pixel size
     G4double pixelX    = 0.1 * mm;
+    G4double pixelY    = 0.1 * mm;
     G4double pixelZ    = 0.1 * mm;
-    
+        
     // absorber Grid definition from pixel size and absorber size
     G4int    nAbsorberX= static_cast<G4int>(2*absorberX/pixelX);
+    G4int    nAbsorberY= static_cast<G4int>(2*absorberY/pixelY);
     G4int    nAbsorberZ= static_cast<G4int>(2*absorberZ/pixelZ);
 
     // world pixel size (can be different from absorber pixel size)
@@ -86,7 +85,7 @@ struct SimConfig
 
     // fluence map normalization options
     bool normalizeByArea = true;  // turn raw path length into length/area
-    bool normalizePerPrimary = false; // divide by N primaries
+    bool normalizePerPrimary = true; // divide by N primaries
     // Global guards
     G4double minStep    = 1.1e-6 * mm;
     G4double maxTime    = 1.0 * microsecond;

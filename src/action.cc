@@ -11,13 +11,15 @@ void MyActionInitialization::BuildForMaster() const
 }
 void MyActionInitialization::Build() const
 {
-	MyPrimaryGenerator *generator = new MyPrimaryGenerator(cfg_);
+	
 	MyRunAction *runAction = new MyRunAction(cfg_);
 	runAction->SetMacroPath(macroPath_);
+	SetUserAction(runAction);
+
+	MyPrimaryGenerator *generator = new MyPrimaryGenerator(cfg_, runAction);
 	MyEventAction *eventAction = new MyEventAction(cfg_);
 
 	SetUserAction(generator);
-	SetUserAction(runAction);
 	SetUserAction(eventAction);
 
 	auto* det = dynamic_cast<const MyDetectorConstruction*>(G4RunManager::GetRunManager()->GetUserDetectorConstruction());
