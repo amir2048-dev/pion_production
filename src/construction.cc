@@ -10,6 +10,7 @@
 #include "G4MagIntegratorStepper.hh"
 #include "G4ClassicalRK4.hh"
 #include "G4Mag_UsualEqRhs.hh"
+#include <cmath>
 
 
 
@@ -21,7 +22,7 @@ G4ThreadLocal G4MagIntegratorStepper*  MyDetectorConstruction::tStepper   = null
 G4ThreadLocal G4ChordFinder*           MyDetectorConstruction::tChord     = nullptr;
 void MyDetectorConstruction::ConstructSDandField()
 {
-	if (!tMagField)
+	if (cfg_.enableMagneticField && !tMagField)
     {	
 		// ---- your field ----
 		tMagField = new G4UniformMagField(G4ThreeVector(0., 0., cfg_.fieldZ));
@@ -63,7 +64,43 @@ G4VPhysicalVolume *MyDetectorConstruction::Construct()
 	fSolidAbsorber = solidAbsorber;
 	G4LogicalVolume *logicAbsorber = new G4LogicalVolume(solidAbsorber,absorberMat,"logicAbsorber");
 	fPhysAbsorber = new G4PVPlacement(0, G4ThreeVector(cfg_.absorberXOrigin,cfg_.absorberYOrigin,cfg_.absorberZOrigin),  logicAbsorber,"physAbsorber",logicWorld,false,0,true);
-	
+	if (cfg_.enableExitPlane)
+	{
+		G4Box 	*solidExitPlane = new G4Box("solidExitPlane",cfg_.exitPlaneHalfX, cfg_.exitPlaneHalfY, 0.01*cm); //(name halfx halfy halfz) 
+		fSolidExitPlane = solidExitPlane;
+		G4LogicalVolume *logicExitPlane = new G4LogicalVolume(solidExitPlane, worldMat,"logicExitPlane");
+		fPhysExitPlane = new G4PVPlacement(0, G4ThreeVector(0.,0.,cfg_.exitPlaneZ),  logicExitPlane,"physExitPlane",logicWorld,false,0,true);
+		
+		// Compute angle ranges from geometry
+		if (cfg_.angleAutoCompute) {
+			const G4double dZ = cfg_.exitPlaneZ - cfg_.absorberZOrigin;
+			if (dZ > 0.0) {
+				const G4double maxRadX = cfg_.absorberX + cfg_.exitPlaneHalfX;
+				const G4double maxRadY = cfg_.absorberY + cfg_.exitPlaneHalfY;
+				fAngleMaxThetaX = std::atan(maxRadX / dZ);
+				fAngleMaxThetaY = std::atan(maxRadY / dZ);
+				fAngleMinThetaX = -fAngleMaxThetaX;
+				fAngleMinThetaY = -fAngleMaxThetaY;
+				G4cout << "[Construction] Auto-computed angle ranges:" << G4endl;
+				G4cout << "  dZ = " << (dZ/cm) << " cm" << G4endl;
+				G4cout << "  maxRadX = " << (maxRadX/cm) << " cm, maxRadY = " << (maxRadY/cm) << " cm" << G4endl;
+				G4cout << "  theta_x: " << fAngleMinThetaX << " to " << fAngleMaxThetaX << " rad" << G4endl;
+				G4cout << "  theta_y: " << fAngleMinThetaY << " to " << fAngleMaxThetaY << " rad" << G4endl;
+			} else {
+				G4cerr << "[Construction] Warning: exitPlaneZ <= absorberZOrigin, using manual angle ranges." << G4endl;
+				fAngleMinThetaX = cfg_.angleMinThetaX;
+				fAngleMaxThetaX = cfg_.angleMaxThetaX;
+				fAngleMinThetaY = cfg_.angleMinThetaY;
+				fAngleMaxThetaY = cfg_.angleMaxThetaY;
+			}
+		} else {
+			// Use manual overrides from config
+			fAngleMinThetaX = cfg_.angleMinThetaX;
+			fAngleMaxThetaX = cfg_.angleMaxThetaX;
+			fAngleMinThetaY = cfg_.angleMinThetaY;
+			fAngleMaxThetaY = cfg_.angleMaxThetaY;
+		}
+	}
 	return fPhysWorld;
 }
 

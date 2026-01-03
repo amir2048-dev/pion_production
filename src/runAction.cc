@@ -1,4 +1,5 @@
 #include "runAction.hh"
+#include "construction.hh"
 #include <fstream>
 #include <iomanip>
 #include <filesystem>
@@ -127,6 +128,21 @@ G4Run* MyRunAction::GenerateRun()
 
 void MyRunAction::BeginOfRunAction(const G4Run* run)
 {
+	// Get angle ranges from detector construction (geometry is now built)
+	if (cfg_.enableExitPlane) {
+		auto* det = dynamic_cast<const MyDetectorConstruction*>(G4RunManager::GetRunManager()->GetUserDetectorConstruction());
+		if (det) {
+			fAngleMinThetaX = det->GetAngleMinThetaX();
+			fAngleMaxThetaX = det->GetAngleMaxThetaX();
+			fAngleMinThetaY = det->GetAngleMinThetaY();
+			fAngleMaxThetaY = det->GetAngleMaxThetaY();
+			if (IsMaster()) {
+				G4cout << "[RunAction::Begin] Angle ranges: theta_x=[" << fAngleMinThetaX << "," << fAngleMaxThetaX 
+				       << "], theta_y=[" << fAngleMinThetaY << "," << fAngleMaxThetaY << "]" << G4endl;
+			}
+		}
+	}
+	
 	// Make folder: data/<YYYY-MM-DD>/<HH-MM-SS>+<runName>
 	date_ = utc_date();
 	timeStamp_  = utc_time();
@@ -216,6 +232,59 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 		write_csv_1d(outDir_ + "/genrator_energy.csv", simRun->genratorEnergy);
 	}
 	
+	// Exit plane angle histograms (theta_x vs theta_y)
+	if (cfg_.enableExitPlane)
+	{
+		write_csv_2d(outDir_ + "/pion_exit_plane_angles.csv", 
+					 simRun->pionExitPlaneAngleHistograms, 
+					 cfg_.nAngleBinsThetaX, cfg_.nAngleBinsThetaY);
+		if (cfg_.angleIncludeBackground)
+		{
+			write_csv_2d(outDir_ + "/background_exit_plane_angles.csv", 
+						 simRun->backgroundExitPlaneAngleHistograms, 
+						 cfg_.nAngleBinsThetaX, cfg_.nAngleBinsThetaY);
+		}
+		
+		// Write angle bin edges metadata
+		std::ofstream angleMeta(outDir_ + "/angle_bin_edges.txt");
+		angleMeta.setf(std::ios::scientific, std::ios::floatfield);
+		angleMeta << std::setprecision(6);
+		angleMeta << "# Exit plane angle histogram metadata\n";
+		angleMeta << "# Angles are in radians, using atan2(px,pz) and atan2(py,pz)\n";
+		angleMeta << "# Histogram dimensions: " << cfg_.nAngleBinsThetaX << " x " << cfg_.nAngleBinsThetaY << "\n\n";
+		
+		angleMeta << "[ThetaX Bins]\n";
+		angleMeta << "min = " << fAngleMinThetaX << " rad\n";
+		angleMeta << "max = " << fAngleMaxThetaX << " rad\n";
+		angleMeta << "nbins = " << cfg_.nAngleBinsThetaX << "\n";
+		angleMeta << "bin_width = " << ((fAngleMaxThetaX - fAngleMinThetaX) / cfg_.nAngleBinsThetaX) << " rad\n\n";
+		
+		angleMeta << "[ThetaY Bins]\n";
+		angleMeta << "min = " << fAngleMinThetaY << " rad\n";
+		angleMeta << "max = " << fAngleMaxThetaY << " rad\n";
+		angleMeta << "nbins = " << cfg_.nAngleBinsThetaY << "\n";
+		angleMeta << "bin_width = " << ((fAngleMaxThetaY - fAngleMinThetaY) / cfg_.nAngleBinsThetaY) << " rad\n\n";
+		
+		// Write bin centers for easy plotting
+		angleMeta << "[ThetaX Bin Centers (rad)]\n";
+		const double dThetaX = (fAngleMaxThetaX - fAngleMinThetaX) / cfg_.nAngleBinsThetaX;
+		for (int i = 0; i < cfg_.nAngleBinsThetaX; ++i) 
+		{
+			angleMeta << (fAngleMinThetaX + (i + 0.5) * dThetaX);
+			if (i < cfg_.nAngleBinsThetaX - 1) angleMeta << ", ";
+		}
+		angleMeta << "\n\n";
+		
+		angleMeta << "[ThetaY Bin Centers (rad)]\n";
+		const double dThetaY = (fAngleMaxThetaY - fAngleMinThetaY) / cfg_.nAngleBinsThetaY;
+		for (int i = 0; i < cfg_.nAngleBinsThetaY; ++i) 
+		{
+			angleMeta << (fAngleMinThetaY + (i + 0.5) * dThetaY);
+			if (i < cfg_.nAngleBinsThetaY - 1) angleMeta << ", ";
+		}
+		angleMeta << "\n";
+	}
+	
 	// Write results.txt summary
 
 	std::ofstream txt(outDir_ + "/results.txt");
@@ -225,61 +294,128 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     // Header
     txt << "Run folder: " << stamp_ << "\n";
     txt << "Date      : " << date_ << "\n\n";
+	txt << "seed used : " << G4Random::getTheSeed() << "\n\n";
 
     // From cfg
     txt << "[Config]\n";
     txt << "  run name           : " << runName_ << "\n";
     txt << "  run Description    : " << cfg_.runDescription << "\n";
+    txt.setf(std::ios::fixed, std::ios::floatfield);
+    txt << std::setprecision(2);
     txt << "  world (half, cm)   : "
         << (cfg_.worldX/cm) << " x " << (cfg_.worldY/cm) << " x " << (cfg_.worldZ/cm) << "\n";
     txt << "  absorber(half, cm) : "
         << (cfg_.absorberX/cm) << " x " << (cfg_.absorberY/cm) << " x " << (cfg_.absorberZ/cm) << "\n";
-    txt << "  field strength (T) : " << (cfg_.fieldZ/tesla) << "\n";
+    txt << "  magnetic field     : " << (cfg_.enableMagneticField ? "enabled" : "disabled") << "\n";
+    if (cfg_.enableMagneticField) 
+	{
+        txt << "  field strength (T) : " << (cfg_.fieldZ/tesla) << "\n";
+    }
     // TODO: field location (add to SimConfig later)
     // txt << "  field location    : " << cfg_.fieldLocation << "\n";
     txt << "  pixel (mm)         : " << (cfg_.pixelX/mm) << " x " << (cfg_.pixelZ/mm) << "\n";
-    txt << "  primary particle    : " << cfg_.gunParticle << "\n";
+    txt << "  primary particle   : " << cfg_.gunParticle << "\n";
 	if (cfg_.beamModel == SimConfig::BeamModel::TopHatDisk)
+	{
 		txt << "  beam model         : TopHatDisk (radius = " << (cfg_.beamRadius/mm) << " mm)\n";
+	}
 	else if (cfg_.beamModel == SimConfig::BeamModel::Gaussian)
+	{
 		txt << "  beam model         : Gaussian (sigma = " << (cfg_.beamSigma/mm) << " mm)\n";
+	}
 	else
+	{	
 		txt << "  beam model         : Unknown\n";
+	}
 	if (cfg_.energyModel == SimConfig::EnergyModel::Mono)
-		txt << "  energy model      : Mono (E = " << (cfg_.Emono/MeV) << " MeV)\n";
+	{
+		txt << "  energy model       : Mono (E = " << (cfg_.Emono/MeV) << " MeV)\n";
+	}
 	else if (cfg_.energyModel == SimConfig::EnergyModel::Uniform)
-		txt << "  energy model      : Uniform (E = " << (cfg_.EunifMin/MeV) << " .. " << (cfg_.Emax/MeV) << " MeV)\n";
+	{
+		txt << "  energy model       : Uniform (E = " << (cfg_.EunifMin/MeV) << " .. " << (cfg_.Emax/MeV) << " MeV)\n";
+	}
 	else if (cfg_.energyModel == SimConfig::EnergyModel::MaxwellLike)
-		txt << "  energy model      : Maxwell-like (T = " << (cfg_.Tmaxwell/MeV) << " MeV, Emin cutoff = " << (cfg_.EminCutoff/MeV) << " MeV)\n";
+	{
+		txt << "  energy model       : Maxwell-like (T = " << (cfg_.Tmaxwell/MeV) << " MeV, Emin cutoff = " << (cfg_.EminCutoff/MeV) << " MeV)\n";
+	}
 	else
-		txt << "  energy model      : Unknown\n";
+	{
+		txt << "  energy model       : Unknown\n";
+	}
+	if (cfg_.enableExitPlane)
+	{
+		txt << "  exit plane Z (cm)  : " << (cfg_.exitPlaneZ/cm) << "\n";
+		txt << "  exit plane size    : " << (cfg_.exitPlaneHalfX/cm) << " x " << (cfg_.exitPlaneHalfY/cm) << " cm\n";
+		txt << "  angle bins         : " << cfg_.nAngleBinsThetaX << " x " << cfg_.nAngleBinsThetaY << "\n";
+		txt.setf(std::ios::fixed, std::ios::floatfield);
+		txt << std::setprecision(4);
+		txt << "  theta_x range (rad): " << fAngleMinThetaX << " to " << fAngleMaxThetaX 
+		    << " (" << (fAngleMinThetaX * 180.0 / M_PI) << "° to " << (fAngleMaxThetaX * 180.0 / M_PI) << "°)\n";
+		txt << "  theta_y range (rad): " << fAngleMinThetaY << " to " << fAngleMaxThetaY 
+		    << " (" << (fAngleMinThetaY * 180.0 / M_PI) << "° to " << (fAngleMaxThetaY * 180.0 / M_PI) << "°)\n";
+		txt << "  angle auto-compute : " << (cfg_.angleAutoCompute ? "yes" : "no") << "\n";
+		txt.setf(std::ios::scientific, std::ios::floatfield);
+		txt << std::setprecision(1);
+	}
 
     txt << "\n";
 
     // From macro (runtime parameters)
     txt << "[Macro]\n";
-    txt << "  number of runs (N) : " << N_sim << "\n";
-	txt << "  effective number of runs (N_phys for Emin = " << cfg_.EminCutoff << " MeV )    : " << N_phys << "\n";
-    txt << "  number of threads  : " << G4RunManager::GetRunManager()->GetNumberOfThreads() << "\n";
+    if (N_sim >= 10000)
+	{
+        txt.setf(std::ios::scientific, std::ios::floatfield);
+        txt << std::setprecision(1);
+        txt << "  number of primaries      : " << static_cast<double>(N_sim) << "\n";
+        txt << "  effective primaries (Emin=" << (cfg_.EminCutoff/MeV) << " MeV): " << N_phys << "\n";
+    } 
+	else
+	{
+        txt.setf(std::ios::fixed, std::ios::floatfield);
+        txt << std::setprecision(0);
+        txt << "  number of primaries      : " << N_sim << "\n";
+        txt << std::setprecision(1);
+        txt << "  effective primaries (Emin=" << (cfg_.EminCutoff/MeV) << " MeV): " << N_phys << "\n";
+    }
+    txt.setf(std::ios::fixed, std::ios::floatfield);
+    txt << std::setprecision(0);
+    txt << "  number of threads        : " << G4RunManager::GetRunManager()->GetNumberOfThreads() << "\n";
     if (!macroPath_.empty())
-      txt << "  macro file       : " << macroPath_ << "\n";
+	{
+    	txt << "  macro file         : " << macroPath_ << "\n";
+	}
     txt << "\n";
 
     // From simulation counters
     txt << "[Results]\n";
-    txt << "  pi+ in absorber    : " << simRun->npiPosIn << "\n";
-    txt << "  pi+ outside world  : " << simRun->npiPosOut << "\n";
+    txt.setf(std::ios::fixed, std::ios::floatfield);
+    txt << std::setprecision(0);
+    txt << "  pi+ created (in absorber): " << simRun->npiPosIn << "\n";
+    txt << "  pi+ exited absorber      : " << simRun->npiPosOut << "\n";
     txt << "\n";
 
     // Timing
     const auto nEvt = static_cast<double>(N_sim);
     const double perEvt = (nEvt > 0.0) ? (dt / nEvt) : 0.0;
     txt << "[Timing]\n";
-    txt << "  runtime (s)        : " << dt << "\n";
-    txt << "  runtime per run (s): " << perEvt << "\n";
-	txt << "  system time (s)    : " << myTimer_.GetSystemElapsed() << "\n";
-	txt << "  user time (s)      : " << myTimer_.GetUserElapsed() << "\n";
-	txt << "  cpu efficiency (%) : " << (100.0 * (myTimer_.GetUserElapsed()+myTimer_.GetSystemElapsed() )/ dt) << "\n";
+    txt.setf(std::ios::fixed, std::ios::floatfield);
+    txt << std::setprecision(2);
+    txt << "  runtime (s)          : " << dt << "\n";
+    txt << "  runtime per primary (s): ";
+    if (perEvt < 0.0001)
+	{
+        txt.setf(std::ios::scientific, std::ios::floatfield);
+        txt << std::setprecision(2) << perEvt << "\n";
+        txt.setf(std::ios::fixed, std::ios::floatfield);
+    } 
+	else
+	{
+        txt << perEvt << "\n";
+    }
+    txt << "  system time (s)      : " << myTimer_.GetSystemElapsed() << "\n";
+    txt << "  user time (s)        : " << myTimer_.GetUserElapsed() << "\n";
+    txt << "  cpu efficiency (%)   : " << (100.0 * (myTimer_.GetUserElapsed()+myTimer_.GetSystemElapsed() )/ dt) << "\n";
     txt << "\n";
 
 
@@ -291,6 +427,7 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
     << "  pi+ out world    : " << simRun->npiPosOut << "\n"
 	<< "  Run time (s)     : " << dt                << "\n"
     << "  total steps      : " << simRun->steps     << "\n"
+	<< "  debug feature ct : " << simRun->debugFeature << "\n"
     << "------------------------------\n" << G4endl;
     
 }

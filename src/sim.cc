@@ -23,9 +23,21 @@ int main(int argc, char** argv)
 {
     G4Timer myTimer;
     myTimer.Start(); 
-    G4long seed = static_cast<G4long>(time(nullptr));
-    CLHEP::HepRandom::setTheSeed(seed);
     SimConfig cfg;
+    
+    // Set random seed based on configuration
+    G4long seed;
+    if (cfg.useFixedSeed)
+    {
+        seed = cfg.fixedSeed;
+        G4cout << "Using fixed random seed: " << seed << G4endl;
+    }
+    else
+    {
+        seed = static_cast<G4long>(time(nullptr));
+        G4cout << "Using time-based random seed: " << seed << G4endl;
+    }
+    CLHEP::HepRandom::setTheSeed(seed);
     std::string macroPath;
     auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);
     runManager->SetUserInitialization(new MyDetectorConstruction(cfg));

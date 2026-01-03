@@ -27,9 +27,15 @@ class MyDetectorConstruction : public G4VUserDetectorConstruction
 		virtual void ConstructSDandField() override;
 		G4VPhysicalVolume* GetWorldPV()    const { return fPhysWorld; }
 		G4VPhysicalVolume* GetAbsorberPV() const { return fPhysAbsorber; }
+		G4VPhysicalVolume* GetExitPlanePV() const { return fPhysExitPlane; }
 		const G4Box* GetWorldBox() const { return fSolidWorld; }
 		const G4Box* GetAbsorberBox() const { return fSolidAbsorber; }
-	
+		const G4Box* GetExitPlaneBox() const { return fSolidExitPlane; }
+		// Get computed or manual angle ranges
+		G4double GetAngleMinThetaX() const { return fAngleMinThetaX; }
+		G4double GetAngleMaxThetaX() const { return fAngleMaxThetaX; }
+		G4double GetAngleMinThetaY() const { return fAngleMinThetaY; }
+		G4double GetAngleMaxThetaY() const { return fAngleMaxThetaY; }	
 	private:
 		const SimConfig& cfg_;
 		G4UserLimits* fStepLimit = nullptr; // pointer to user step limits
@@ -39,12 +45,16 @@ class MyDetectorConstruction : public G4VUserDetectorConstruction
 		static G4ThreadLocal G4ChordFinder*       tChord;
 		G4VPhysicalVolume* fPhysWorld = nullptr;
 		G4VPhysicalVolume* fPhysAbsorber = nullptr;
-		G4Box*             fSolidWorld   = nullptr;
-		G4Box*             fSolidAbsorber= nullptr;
-
+		G4VPhysicalVolume* fPhysExitPlane = nullptr;
+	G4Box*             fSolidWorld   = nullptr;
+	G4Box*             fSolidAbsorber= nullptr;
+	G4Box*             fSolidExitPlane= nullptr;
+	// Computed angle ranges (set during Construct())
+	G4double           fAngleMinThetaX = 0.0;
+	G4double           fAngleMaxThetaX = 0.0;
+	G4double           fAngleMinThetaY = 0.0;
+	G4double           fAngleMaxThetaY = 0.0;
 
 };
-
-
 
 #endif

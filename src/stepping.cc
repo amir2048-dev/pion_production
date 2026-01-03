@@ -1,5 +1,6 @@
 #include "stepping.hh" 
 #include "G4TrackStatus.hh"
+#include <cmath>
 namespace 
 {
 	constexpr G4int PDG_Gamma    = 22;     // γ
@@ -10,6 +11,9 @@ namespace
 	constexpr G4int PDG_PionZero = 111;    // π⁰
 	constexpr G4int PDG_Neutron  = 2112;   // n
 	auto clampIndex = [](int idx, const SimConfig& cfg){return idx < 0 ? 0 : (idx > cfg.energymaxIndex ? cfg.energymaxIndex : idx);};
+	auto energyToIndex = [](G4double ekin, const SimConfig& cfg) -> int {
+		return static_cast<int>(ekin / cfg.getEnergyBinWidth() + 0.5);
+	};
 	inline bool IsAllowedPDG(G4int pdg)
     {
 		// gamma, e-, e+, pi+, pi-, neutron
@@ -107,6 +111,37 @@ namespace
 
 		return count;
 	}
+	// helpers for angle histogram binning using small-angle approximation
+	// theta_x and theta_y are the angles in radians from the z-axis projected onto x-z and y-z planes
+	inline int thetaXBin(double thetaX, double minThetaX, double maxThetaX, int nBins)
+	{
+		if (thetaX < minThetaX || thetaX >= maxThetaX) return -1;
+		const double dThetaX = (maxThetaX - minThetaX) / nBins;
+		int idx = static_cast<int>((thetaX - minThetaX) / dThetaX);
+		if (idx < 0) idx = 0;
+		else if (idx >= nBins) idx = nBins - 1;
+		return idx;
+	}
+	inline int thetaYBin(double thetaY, double minThetaY, double maxThetaY, int nBins)
+	{
+		if (thetaY < minThetaY || thetaY >= maxThetaY) return -1;
+		const double dThetaY = (maxThetaY - minThetaY) / nBins;
+		int idx = static_cast<int>((thetaY - minThetaY) / dThetaY);
+		if (idx < 0) idx = 0;
+		else if (idx >= nBins) idx = nBins - 1;
+		return idx;
+	}
+	// calculate theta_x and theta_y from momentum vector using atan2 for robustness
+	// theta_x = atan2(px, pz), theta_y = atan2(py, pz)
+	inline void computeThetaXY(const G4ThreeVector& p, double& thetaX, double& thetaY)
+	{
+		const double px = p.x();
+		const double py = p.y();
+		const double pz = p.z();
+		// Use atan2 to handle all angles, including large tilts; will be filtered later for pz<=0
+		thetaX = std::atan2(px, pz);
+		thetaY = std::atan2(py, pz);
+	}
 }
 MySteppingAction::~MySteppingAction()
 {}
@@ -128,6 +163,8 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     
 	auto* pre = step->GetPreStepPoint();
 	const G4VPhysicalVolume* prePV  = pre->GetPhysicalVolume();
+	auto* post = step->GetPostStepPoint();
+	const G4VPhysicalVolume* postPV = post->GetPhysicalVolume();
 	auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
     
 	if (pdg == PDG_PionPlus)
@@ -136,7 +173,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		{
 			if (prePV==fAbsorberPV && IsFirstStepInVolume)
 			{
-				int i = clampIndex(static_cast<int>(ekin/MeV + 0.5), cfg_);
+				int i = clampIndex(energyToIndex(ekin, cfg_), cfg_);
 				fRunAction->fRun->pionEnergyIn[i] +=1;
 				fRunAction->fRun->npiPosIn+=1;
 							
@@ -164,13 +201,11 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 				 }
                });
 			}
-				
-			if (prePV==fWorldPV && IsFirstStepInVolume)
+			if (prePV==fAbsorberPV && postPV!=fAbsorberPV)
 			{
-				int i = clampIndex(static_cast<int>(ekin/MeV + 0.5), cfg_);
+				int i = clampIndex(energyToIndex(ekin, cfg_), cfg_);
 				fRunAction->fRun->pionEnergyOut[i] +=1;
 				fRunAction->fRun->npiPosOut+=1;
-				
 			}
 		}
 	}
@@ -179,7 +214,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
 		if (pdg == PDG_Gamma  && prePV==fAbsorberPV && IsFirstStepInVolume)
 		{
-	    	int i = clampIndex(static_cast<int>(ekin/MeV + 0.5), cfg_);
+	    	int i = clampIndex(energyToIndex(ekin, cfg_), cfg_);
 	    	fRunAction->fRun->gammaEnergy[i] +=1;
 		}
 
@@ -237,9 +272,38 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     	}
     
 	}
-
+	if (cfg_.enableExitPlane && prePV==fExitPlanePV)
+	{
+		if (pdg == PDG_PionPlus || cfg_.angleIncludeBackground)
+		{
+			G4ThreeVector momentum = track->GetMomentum();
+			// Only consider forward-going tracks (pz > 0)
+			if (momentum.z() <= 0.0) {
+				// skip non-forward tracks for exit-plane angle scoring
+				goto after_exit_plane_angle;
+			}
+			double thetaX, thetaY;
+			computeThetaXY(momentum, thetaX, thetaY);
+			int ithetaX = thetaXBin(thetaX, fRunAction->GetAngleMinThetaX(), fRunAction->GetAngleMaxThetaX(), cfg_.nAngleBinsThetaX);
+			int ithetaY = thetaYBin(thetaY, fRunAction->GetAngleMinThetaY(), fRunAction->GetAngleMaxThetaY(), cfg_.nAngleBinsThetaY);
+			if (0<=ithetaX && ithetaX<cfg_.nAngleBinsThetaX && 0<=ithetaY && ithetaY<cfg_.nAngleBinsThetaY)
+			{
+				const int index = ithetaX + ithetaY * cfg_.nAngleBinsThetaX;
+				if (pdg == PDG_PionPlus)
+				{
+					fRunAction->fRun->pionExitPlaneAngleHistograms[index] += 1.0;
+				}
+				else
+				{
+					fRunAction->fRun->backgroundExitPlaneAngleHistograms[index] += 1.0;
+				}
+			}
+		}
+		after_exit_plane_angle: ;
+	}
 	if(cfg_.runDebug)
 	{	
 		fRunAction->fRun->steps+=1; // Count all steps
+		fRunAction->fRun->debugFeature+=1; // Count all steps for debug feature
 	}
 }

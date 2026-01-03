@@ -14,7 +14,7 @@ public:
 	virtual ~Run(){};
 	void Merge(const G4Run*) override;
     // scalars
-  	G4int npiPosIn = 0, npiPosOut = 0, steps = 0;
+  	G4int npiPosIn = 0, npiPosOut = 0, steps = 0, debugFeature = 0;
 	// spectra 
   	std::vector<G4int> pionEnergyIn;   // size = cfg_.energyBins
   	std::vector<G4int> pionEnergyOut;  // size = cfg_.energyBins
@@ -29,6 +29,11 @@ public:
 	std::vector<double> gammaCreationAbs;      // if you want path length of "created" gammas' first step; or drop if not meaningful
 	// world grid (X–Z)
 	std::vector<double> pionFluenceWorld;
+	// exit plane angle histograms
+	std::vector<double> pionExitPlaneAngleHistograms;
+	std::vector<double> backgroundExitPlaneAngleHistograms;
+
+
 	
 	// genrator beam grid (X-Y)
 	std::vector<double> genratorBeamXY;

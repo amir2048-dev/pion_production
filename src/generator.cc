@@ -62,10 +62,10 @@ void MyPrimaryGenerator::GeneratePrimaries(G4Event *anEvent)
 	// Sample energy (apply cutoff + model)
   	G4double E = sampleEnergy_();
   	particleGun_->SetParticleEnergy(E);
-	// increment generator energy histogram
-	int bin = static_cast<int>(E / MeV + 0.5);
+	// increment generator energy histogram (1 MeV bins)
+	int bin = static_cast<int>(E / MeV);
 	if (bin < 0) bin = 0;
-	if (bin >= cfg_.energyBins) bin = cfg_.energyBins - 1;
+	if (bin >= cfg_.generatorEnergyBins) bin = cfg_.generatorEnergyBins - 1;
 	runAction_->fRun->genratorEnergy[bin]++;
 
   	particleGun_->GeneratePrimaryVertex(anEvent);
