@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: build",
+      "type": "shell",
+      "command": "cmake --build ${command:cmake.buildDirectory} -j",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "perf: record (active macro)",
+      "type": "shell",
+      "dependsOn": "CMake: build",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "cd ${command:cmake.getLaunchTargetDirectory} && perf record -g --call-graph dwarf -F 999 -o perf.data -- ${command:cmake.launchTargetPath} ${file}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "perf: open hotspot",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "cd ${command:cmake.getLaunchTargetDirectory} && hotspot perf.data"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

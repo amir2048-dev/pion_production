@@ -1,137 +1,139 @@
-//
-// ********************************************************************
-// * License and Disclaimer                                           *
-// *                                                                  *
-// * The  Geant4 software  is  copyright of the Copyright Holders  of *
-// * the Geant4 Collaboration.  It is provided  under  the terms  and *
-// * conditions of the Geant4 Software License,  included in the file *
-// * LICENSE and available at  http://cern.ch/geant4/license .  These *
-// * include a list of copyright holders.                             *
-// *                                                                  *
-// * Neither the authors of this software system, nor their employing *
-// * institutes,nor the agencies providing financial support for this *
-// * work  make  any representation or  warranty, express or implied, *
-// * regarding  this  software system or assume any liability for its *
-// * use.  Please see the license in the file  LICENSE  and URL above *
-// * for the full disclaimer and the limitation of liability.         *
-// *                                                                  *
-// * This  code  implementation is the result of  the  scientific and *
-// * technical work of the GEANT4 collaboration.                      *
-// * By using,  copying,  modifying or  distributing the software (or *
-// * any work based  on the software)  you  agree  to acknowledge its *
-// * use  in  resulting  scientific  publications,  and indicate your *
-// * acceptance of all terms of the Geant4 Software license.          *
-// ********************************************************************
-//
-/// \file PhysicsList.cc
-/// \brief Implementation of the PhysicsList class
-//
-
-//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+// PhysicsList.cc
+// Clean, consistent, "light for development" baseline with clearly marked precision options.
+// Goal: 300 MeV-ish e- on thick Pb -> bremsstrahlung -> photonuclear pions -> transport in B-field
+// Keep flexibility for future detector/noise realism without paying the cost now.
 
 #include "PhysicsList.hh"
 
 #include "G4SystemOfUnits.hh"
-
 #include "G4NuclideTable.hh"
 
-#include "G4HadronElasticPhysicsXS.hh"
-#include "HadronElasticPhysicsHP.hh"
-#include "G4HadronPhysicsFTFP_BERT_HP.hh"
-#include "G4HadronPhysicsQGSP_BIC_HP.hh"
-#include "G4HadronPhysicsQGSP_BIC_AllHP.hh"
-#include "G4HadronInelasticQBBC.hh"
-#include "G4HadronPhysicsINCLXX.hh"
+// Hadronic / ions
+#include "G4HadronElasticPhysics.hh"
+#include "G4HadronElasticPhysicsXS.hh"      // optional (slower, more detailed)
+#include "HadronElasticPhysicsHP.hh"        // your optional HP neutron elastic (<20 MeV)
+
+#include "G4HadronPhysicsFTFP_BERT.hh"
+#include "G4HadronPhysicsFTFP_BERT_HP.hh"   // optional (slower) full HP neutrons (incl capture/inelastic)
 #include "G4IonElasticPhysics.hh"
 #include "G4IonPhysicsXS.hh"
-#include "G4IonINCLXXPhysics.hh"
 #include "G4StoppingPhysics.hh"
+
+// Gamma-nuclear / photonuclear
 #include "GammaNuclearPhysics.hh"
-#include "G4Transportation.hh"
-#include "G4TransportationManager.hh"
-//#include "GammaNuclearPhysicsLEND.hh"
-///#include "G4EmExtraPhysics.hh"
 
-#include "ElectromagneticPhysics.hh"
-#include "G4EmStandardPhysics_option3.hh"
-
+// EM / decay
+#include "ElectromagneticPhysics.hh"        // your EM physics (brems, MSC, etc.)
+// #include "G4EmStandardPhysics_option3.hh" // optional: Geant4 reference EM list for validation
 #include "G4DecayPhysics.hh"
-#include "G4StepLimiterPhysics.hh"
-#include "MyG4StepLimiterPhysics.hh"
+
+// Radioactive decay (usually OFF for dev speed)
 #include "RadioactiveDecayPhysics.hh"
-#include "G4RadioactiveDecayPhysics.hh"
+// #include "G4RadioactiveDecayPhysics.hh"  // optional: standard Geant4 RDM
 
-//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+// Step limiter
+#include "MyG4StepLimiterPhysics.hh"
 
-PhysicsList::PhysicsList()
-:G4VModularPhysicsList()
+PhysicsList::PhysicsList() : G4VModularPhysicsList()
 {
-  G4int verb = 1;
+  const G4int verb = 1;
   SetVerboseLevel(verb);
-  
-  // mandatory for G4NuclideTable
-  //
-  const G4double meanLife = 1*nanosecond, halfLife = meanLife*std::log(2);
+
+  // Mandatory for G4NuclideTable
+  const G4double meanLife = 1 * nanosecond;
+  const G4double halfLife = meanLife * std::log(2.0);
   G4NuclideTable::GetInstance()->SetThresholdOfHalfLife(halfLife);
-     
-  // Hadron Elastic scattering
-  RegisterPhysics( new G4HadronElasticPhysicsXS(verb) );  
-  ///RegisterPhysics( new HadronElasticPhysicsHP(verb) );
-  
-  // Hadron Inelastic Physics
-  RegisterPhysics( new G4HadronPhysicsFTFP_BERT(verb));
-  //RegisterPhysics( new G4HadronPhysicsQGSP_BIC(verb));
-  ////RegisterPhysics( new G4HadronPhysicsQGSP_BIC_HP(verb));
-  ////RegisterPhysics( new G4HadronPhysicsQGSP_BIC_AllHP(verb));
-  ////RegisterPhysics( new G4HadronInelasticQBBC(verb));
-  ////RegisterPhysics( new G4HadronPhysicsINCLXX(verb));
-  
-  // Ion Elastic scattering
-  //
-  RegisterPhysics( new G4IonElasticPhysics(verb));
-  
-  // Ion Inelastic physics
-  RegisterPhysics( new G4IonPhysicsXS(verb));
-  ////RegisterPhysics( new G4IonINCLXXPhysics(verb));
-  
-  // stopping Particles
-  RegisterPhysics( new G4StoppingPhysics(verb));
-      
-  // Gamma-Nuclear Physics
-  RegisterPhysics( new GammaNuclearPhysics("gamma"));
-  ////RegisterPhysics( new GammaNuclearPhysicsLEND("gamma"));
-  ////RegisterPhysics( new G4EmExtraPhysics());
-      
-  // EM physics
+
+  // ------------------------------------------------------------
+  // HADRON ELASTIC (choose ONE)
+  // ------------------------------------------------------------
+  // DEV (recommended): standard elastic (usually fastest)
+  RegisterPhysics(new G4HadronElasticPhysics(verb));
+
+  // OPTION A (more detail, can be slower): elastic with extra XS handling
+  // RegisterPhysics(new G4HadronElasticPhysicsXS(verb));
+
+  // OPTION B (neutron elastic < 20 MeV more accurate, slower):
+  // Use when neutron transport in shielding/detector background matters.
+  // RegisterPhysics(new HadronElasticPhysicsHP(verb));
+  //   If you enable thermal scattering in that class, it must be done pre-init:
+  //   /testhadr/phys/thermalScattering true
+
+  // ------------------------------------------------------------
+  // HADRON INELASTIC (choose ONE)
+  // ------------------------------------------------------------
+  // DEV (recommended): coherent, standard, good performance
+  RegisterPhysics(new G4HadronPhysicsFTFP_BERT(verb));
+
+  // OPTION (slower): full HP neutron treatment (elastic+inelastic+capture etc. for low-E n)
+  // Use only for final detector/noise studies where neutron backgrounds matter.
+  // RegisterPhysics(new G4HadronPhysicsFTFP_BERT_HP(verb));
+
+  // IMPORTANT: Do NOT stack other full hadron constructors (e.g., QGSP_BIC_* on top of FTFP_BERT).
+  // It can introduce overlapping models/processes and harm both speed and interpretability.
+
+  // ------------------------------------------------------------
+  // IONS / STOPPING
+  // ------------------------------------------------------------
+  RegisterPhysics(new G4IonElasticPhysics(verb));
+  RegisterPhysics(new G4IonPhysicsXS(verb));
+  RegisterPhysics(new G4StoppingPhysics(verb));
+
+  // ------------------------------------------------------------
+  // GAMMA-NUCLEAR / PHOTONUCLEAR (must-have for photo-pion production)
+  // ------------------------------------------------------------
+  RegisterPhysics(new GammaNuclearPhysics("gamma"));
+
+  // ------------------------------------------------------------
+  // EM (must-have for bremsstrahlung and EM shower development)
+  // ------------------------------------------------------------
   RegisterPhysics(new ElectromagneticPhysics());
-  ////RegisterPhysics(new G4EmStandardPhysics_option3());
-  
-  // Decay
+  // OPTION (for cross-checking physics/results): Geant4 reference EM list
+  // RegisterPhysics(new G4EmStandardPhysics_option3());
+
+  // ------------------------------------------------------------
+  // DECAYS
+  // ------------------------------------------------------------
   RegisterPhysics(new G4DecayPhysics());
 
-  // Radioactive decay
+  // Radioactive decay: typically OFF for dev speed unless studying activation backgrounds
   RegisterPhysics(new RadioactiveDecayPhysics());
-  ////RegisterPhysics(new G4RadioactiveDecayPhysics());  
-  RegisterPhysics (new G4HadronPhysicsQGSP_BIC_HP(verb));
-  //RegisterPhysics(new G4StepLimiterPhysics());
-  RegisterPhysics(new MyG4StepLimiterPhysics());
+  // OPTION: standard Geant4 radioactive decay
+  // RegisterPhysics(new G4RadioactiveDecayPhysics());
 
+  // ------------------------------------------------------------
+  // STEP LIMITER (keep if your workflow relies on it)
+  // ------------------------------------------------------------
+  //RegisterPhysics(new MyG4StepLimiterPhysics());
 }
 
-//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
-
-PhysicsList::~PhysicsList()
-{ }
-
-//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+PhysicsList::~PhysicsList() {}
 
 void PhysicsList::SetCuts()
 {
-  G4ProductionCutsTable::GetProductionCutsTable()->SetEnergyRange(100 * MeV, 101 * MeV);
-  SetCutValue(0*mm, "proton");
-  SetCutValue(45*mm, "e-");
-  SetCutValue(45*mm, "e+");
-  SetCutValue(10*mm, "gamma");      
-}
+  // Production cuts table should span a wide energy range (sanity/stability).
+  G4ProductionCutsTable::GetProductionCutsTable()->SetEnergyRange(250 * eV, 100 * GeV);
 
-//....oooOO0OOooo........oooOO0OOooo........oooOO0OOooo........oooOO0OOooo......
+  // ------------------------------------------------------------
+  // DEV CUTS (fast iteration)
+  // ------------------------------------------------------------
+  // These are big cuts -> fewer low-energy e±/γ secondaries tracked -> much faster.
+  // This can under-estimate detector noise later, so treat as "development mode".
+  SetCutValue(100 * mm, "e-");
+  SetCutValue(100 * mm, "e+");
+  SetCutValue(50  * mm, "gamma");
+
+  // OPTION (more realistic EM shower / detector noise): reduce global cuts
+  // SetCutValue(1 * mm, "e-");
+  // SetCutValue(1 * mm, "e+");
+  // SetCutValue(1 * mm, "gamma");
+
+  // BEST PRACTICE FOR FUTURE DETECTOR WORK:
+  // Keep large GLOBAL cuts for speed, and apply SMALL cuts only in detector/shielding regions
+  // via G4Region + G4ProductionCuts (regional cuts). That gives realistic PMT noise without
+  // slowing the whole simulation.
+
+  // If you later want to suppress very soft hadrons globally, set a nonzero proton cut
+  // (leaving it unset uses default; setting 0 mm may increase secondaries/CPU).
+  // SetCutValue(?? * mm, "proton");
+}

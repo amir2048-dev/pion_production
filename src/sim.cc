@@ -18,6 +18,7 @@
 #include "Randomize.hh"
 #include <ctime>
 #include "SimConfig.hh"
+#include "CLHEP/Random/RanecuEngine.h"
 
 int main(int argc, char** argv)
 {
@@ -37,6 +38,7 @@ int main(int argc, char** argv)
         seed = static_cast<G4long>(time(nullptr));
         G4cout << "Using time-based random seed: " << seed << G4endl;
     }
+    G4Random::setTheEngine(new CLHEP::RanecuEngine());
     CLHEP::HepRandom::setTheSeed(seed);
     std::string macroPath;
     auto* runManager = G4RunManagerFactory::CreateRunManager(G4RunManagerType::Default);

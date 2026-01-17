@@ -6,8 +6,8 @@
 struct SimConfig 
 {
     //run name and description
-    std::string runName = "testing_angle_output";
-    std::string runDescription = "testing the angle histogram output structure"; 
+    std::string runName = "profiling";
+    std::string runDescription = "profiling the simulation performance and optimizing runtime"; 
 
     // random seed control
     G4bool   useFixedSeed = false;     // if true, use fixed seed for reproducibility
@@ -86,9 +86,9 @@ struct SimConfig
     G4double EminCutoff = 200.0 * MeV;   // hard low-cut
 
     //absorber pixel size
-    G4double pixelX    = 0.1 * mm;
-    G4double pixelY    = 0.1 * mm;
-    G4double pixelZ    = 0.1 * mm;
+    G4double pixelX    = 0.5 * mm;  // coarsened from 0.1mm for performance (97% fewer cells)
+    G4double pixelY    = 0.5 * mm;
+    G4double pixelZ    = 0.5 * mm;
         
     // absorber Grid definition from pixel size and absorber size
     G4int    nAbsorberX= static_cast<G4int>(2*absorberX/pixelX);
@@ -104,7 +104,7 @@ struct SimConfig
     G4int    nWorldZ   = static_cast<G4int>(2*worldZ/worldPixelX);
     
     // Spectra binning (for physics outputs: pion/gamma energy)
-    G4int    energyBins = 50;      // number of energy bins
+    G4int    energyBins = 25;      // reduced from 50 for performance
     G4int    energymaxIndex = energyBins - 1;
     G4double energyMax  = Emax; // max energy for spectra histograms = primary max energy
     
@@ -120,12 +120,18 @@ struct SimConfig
     // Global guards
     G4double minStep    = 1.1e-6 * mm;
     G4double maxTime    = 1.0 * microsecond;
-
+    // ----- Particle killing options -----
+    // master kill switches
+    G4bool   killDisallowedPDG      = true;   // if true, kill particles not in allowed PDG list
+    G4bool   killByTime             = true;   // if true, kill particles exceeding maxTime
+    G4bool   killLowEnergyNonPion   = true;   // if true, kill low-energy non-pion particles
+    // energy threshold for low-energy kill (only used if killLowEnergyNonPion = true)
+    G4double lowEnergyThreshold     = 200.0 * MeV;  // threshold below which non-pions are killed
     // Run “modes”
     G4bool   runPiPlusMain = true; // main physics: detect pi+ at end detector
-    G4bool   runConvStats  = true; // converter stats: gamma/e± flux, etc.
-    G4bool   runDebug      = true; // ad-hoc prints/checks
-    G4bool   runWorldMap   = true; // record world-wide pion fluence map 
+    G4bool   runConvStats  = false; // converter stats: gamma/e± flux (MAJOR BOTTLENECK - disable for performance!)
+    G4bool   runDebug      = false; // ad-hoc prints/checks (keep disabled for performance)
+    G4bool   runWorldMap   = false; // record world-wide pion fluence map (keep disabled for performance)
 
     // field on/off and strength
     G4bool   enableMagneticField = false;  // if false, no magnetic field

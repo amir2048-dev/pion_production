@@ -152,14 +152,26 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	auto* def   = track->GetDefinition();
 	const G4int    pdg    = def->GetPDGEncoding();
 	
-	if (!IsAllowedPDG(pdg)) { track->SetTrackStatus(fStopAndKill); return;	} // Kill any particle not in the allowed list
+	// Kill particles not in the allowed PDG list (if enabled)
+	if (cfg_.killDisallowedPDG && !IsAllowedPDG(pdg)) { 
+		track->SetTrackStatus(fStopAndKill); 
+		return;
+	}
 	
 	const G4double ekin   = track->GetKineticEnergy();   
 	const G4double gtime  = track->GetGlobalTime();
 	
-	if (step->GetStepLength() < cfg_.minStep || gtime > cfg_.maxTime) { track->SetTrackStatus(fStopAndKill); return;} // Kill particles with too short steps or too long time
+	// Kill particles exceeding maximum time (if enabled)
+	if (cfg_.killByTime && gtime > cfg_.maxTime) { 
+		track->SetTrackStatus(fStopAndKill); 
+		return;
+	}
 
-	if (pdg != PDG_PionPlus && ekin<200*MeV) { track->SetTrackStatus(fStopAndKill); return; } // Kill low-energy non-pion particles
+	// Kill low-energy non-pion particles (if enabled)
+	if (cfg_.killLowEnergyNonPion && pdg != PDG_PionPlus && ekin < cfg_.lowEnergyThreshold) { 
+		track->SetTrackStatus(fStopAndKill); 
+		return;
+	}
     
 	auto* pre = step->GetPreStepPoint();
 	const G4VPhysicalVolume* prePV  = pre->GetPhysicalVolume();
@@ -196,7 +208,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
                [&](int ix, int iz, double lenCell){
                  if (0<=ix && ix<cfg_.nWorldX && 0<=iz && iz<cfg_.nWorldZ)
 				 {
-                   const int k = fRunAction->fRun->AbsIndex(ix, iz);
+                   const int k = fRunAction->fRun->WorldIndex(ix, iz);
                    fRunAction->fRun->pionFluenceWorld[k] += lenCell;
 				 }
                });
