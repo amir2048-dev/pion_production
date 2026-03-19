@@ -35,7 +35,7 @@ void MyDetectorConstruction::ConstructSDandField()
 		tStepper  = new G4ClassicalRK4(tEquation);
 		G4AutoDelete::Register(tStepper);
 
-		const G4double minStep = cfg_.minStep ;   
+		const G4double minStep = cfg_.fieldMinStep ;   
 		tChord = new G4ChordFinder(tMagField, minStep, tStepper);
 		G4AutoDelete::Register(tChord);
 

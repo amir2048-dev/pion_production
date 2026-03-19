@@ -6,8 +6,8 @@
 struct SimConfig 
 {
     //run name and description
-    std::string runName = "profiling";
-    std::string runDescription = "profiling the simulation performance and optimizing runtime"; 
+    std::string runName = "converter lead thickness scan";
+    std::string runDescription = "checking different lead thicknesses for converter optimization"; 
 
     // random seed control
     G4bool   useFixedSeed = false;     // if true, use fixed seed for reproducibility
@@ -26,7 +26,7 @@ struct SimConfig
     // absorber half size
     G4double absorberX = 0.5 * cm;
     G4double absorberY = 0.5 * cm;
-    G4double absorberZ = 1.0 * cm;
+    G4double absorberZ = 0.125 * cm;
 
     // world origin (center)
     G4double worldXOrigin = 0.0 * cm;
@@ -47,8 +47,8 @@ struct SimConfig
     G4double exitPlaneHalfY        = 10.0 * cm;
     // angle binning using small-angle approximation
     // theta_x = atan2(px, pz), theta_y = atan2(py, pz)
-    G4int    nAngleBinsThetaX      = 10;            // number of bins in x-direction
-    G4int    nAngleBinsThetaY      = 10;            // number of bins in y-direction
+    G4int    nAngleBinsThetaX      = 5;            // number of bins in x-direction
+    G4int    nAngleBinsThetaY      = 5;            // number of bins in y-direction
     // auto-compute angle ranges from geometry, or override manually
     G4bool   angleAutoCompute      = true;           // if true, compute from absorber/exit-plane geometry
     // manual overrides (only used if angleAutoCompute = false)
@@ -86,9 +86,9 @@ struct SimConfig
     G4double EminCutoff = 200.0 * MeV;   // hard low-cut
 
     //absorber pixel size
-    G4double pixelX    = 0.5 * mm;  // coarsened from 0.1mm for performance (97% fewer cells)
-    G4double pixelY    = 0.5 * mm;
-    G4double pixelZ    = 0.5 * mm;
+    G4double pixelX    = 0.25 * mm;  // coarsened from 0.1mm for performance (97% fewer cells)
+    G4double pixelY    = 0.25 * mm;
+    G4double pixelZ    = 0.25 * mm;
         
     // absorber Grid definition from pixel size and absorber size
     G4int    nAbsorberX= static_cast<G4int>(2*absorberX/pixelX);
@@ -118,7 +118,6 @@ struct SimConfig
     G4bool normalizeByArea = true;  // turn raw path length into length/area
     G4bool normalizePerPrimary = true; // divide by N primaries
     // Global guards
-    G4double minStep    = 1.1e-6 * mm;
     G4double maxTime    = 1.0 * microsecond;
     // ----- Particle killing options -----
     // master kill switches
@@ -131,19 +130,21 @@ struct SimConfig
     G4bool   runPiPlusMain = true; // main physics: detect pi+ at end detector
     G4bool   runConvStats  = false; // converter stats: gamma/e± flux (MAJOR BOTTLENECK - disable for performance!)
     G4bool   runDebug      = false; // ad-hoc prints/checks (keep disabled for performance)
-    G4bool   runWorldMap   = false; // record world-wide pion fluence map (keep disabled for performance)
+    G4bool   runWorldMap   = true; // record world-wide pion fluence map (keep disabled for performance)
 
     // field on/off and strength
     G4bool   enableMagneticField = false;  // if false, no magnetic field
     G4double fieldZ      = 0.1 * tesla;
 
     // field minStep
-    G4double fieldMinStep = 0.005 * mm;
+    G4double fieldMinStep = 0.1 * mm;
 
     // field solver parameters
-    G4double deltaChord  = 1e-5;
-    G4double minEpsilon  = 1e-5;
+    G4double deltaChord  = 0.1 * mm; 
+    G4double minEpsilon  = 1e-4;
     G4double maxEpsilon  = 1e-3;
 
-
+    //G4double deltaChord  = 50 * um;
+    //G4double minEpsilon  = 1e-5;
+    //G4double maxEpsilon  = 1e-4;
 };
