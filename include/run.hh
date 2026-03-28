@@ -32,6 +32,16 @@ public:
 	// exit plane angle histograms
 	std::vector<double> pionExitPlaneAngleHistograms;
 	std::vector<double> backgroundExitPlaneAngleHistograms;
+	
+	// exit plane position and momentum data for post-processing (collected during simulation)
+	// Stores position (x, y) and normalized momentum direction (px, py, pz) for each particle at exit plane
+	// All histogram binning and computation happens in runAction (post-processing phase)
+	struct ExitPlaneHit {
+		double x, y;       // Position in mm
+		double px, py, pz; // Momentum direction (normalized)
+	};
+	std::vector<ExitPlaneHit> pionExitPlanePositions;
+	std::vector<ExitPlaneHit> backgroundExitPlanePositions;
 
 
 	

@@ -62,6 +62,92 @@ namespace
         ofs << '\n';
     }
 }
+	// Helper: compute 2D angle histogram (theta_x vs theta_y) from positions and momentum
+	inline std::vector<double> computeAngleHistogram(
+		const std::vector<Run::ExitPlaneHit>& hits,
+		const SimConfig& cfg,
+		double angleMinThetaX, double angleMaxThetaX,
+		double angleMinThetaY, double angleMaxThetaY)
+	{
+		const int nX = cfg.nAngleBinsThetaX;
+		const int nY = cfg.nAngleBinsThetaY;
+		std::vector<double> hist(nX * nY, 0.0);
+		
+		for (const auto& hit : hits)
+		{
+			// Compute theta_x and theta_y from stored momentum
+			double thetaX = std::atan2(hit.px, hit.pz);
+			double thetaY = std::atan2(hit.py, hit.pz);
+			
+			// Bin into histogram
+			int ithetaX = (int)((thetaX - angleMinThetaX) / (angleMaxThetaX - angleMinThetaX) * nX);
+			int ithetaY = (int)((thetaY - angleMinThetaY) / (angleMaxThetaY - angleMinThetaY) * nY);
+			
+			if (0<=ithetaX && ithetaX<nX && 0<=ithetaY && ithetaY<nY)
+			{
+				const int index = ithetaX + ithetaY * nX;
+				hist[index] += 1.0;
+			}
+		}
+		
+		// Apply normalization if enabled (probability distribution)
+		if (cfg.normalizeHistograms && !hits.empty())
+		{
+			double total = 0.0;
+			for (double val : hist) total += val;
+			if (total > 0.0)
+			{
+				for (double& val : hist) val /= total;
+			}
+		}
+		
+		return hist;
+	}
+	// Helper: compute 1D radial histogram from exit plane position data
+	// Returns histogram[radial_bin] with count of particles in each radial shell
+	// If normalizeHistograms is enabled, divides by the area of each shell (Jacobian)
+	// so the result is an areal density (counts per unit area)
+	inline std::vector<double> computeRadialHistogram(
+		const std::vector<Run::ExitPlaneHit>& hits,
+		const SimConfig& cfg)
+	{
+		const int nR = cfg.nRadialBins;
+		std::vector<double> hist(nR, 0.0);
+		
+		const double binWidth = cfg.GetRadialBinWidth();
+		for (const auto& hit : hits)
+		{
+			const double x = hit.x;
+			const double y = hit.y;
+			const double r = std::sqrt(x*x + y*y);
+			
+			// Radial bin index
+			int iradial = static_cast<int>(r / binWidth);
+			if (iradial < 0) iradial = 0;
+			else if (iradial >= nR) iradial = nR - 1;
+			
+			hist[iradial] += 1.0;
+		}
+		
+		// Apply normalization if enabled: divide by area of each radial shell
+		// Area of shell i = pi * (r_outer^2 - r_inner^2) where r_inner = i*w, r_outer = (i+1)*w
+		if (cfg.normalizeHistograms)
+		{
+			const double w = cfg.GetRadialBinWidth();
+			for (int i = 0; i < nR; ++i)
+			{
+				double r_inner = i * w;
+				double r_outer = (i + 1) * w;
+				double shellArea = M_PI * (r_outer * r_outer - r_inner * r_inner);
+				if (shellArea > 0.0)
+				{
+					hist[i] /= shellArea;
+				}
+			}
+		}
+		
+		return hist;
+	}
 	// YYYY-MM-DD (UTC)
 	inline std::string utc_date() 
 	{
@@ -235,13 +321,18 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 	// Exit plane angle histograms (theta_x vs theta_y)
 	if (cfg_.enableExitPlane)
 	{
+		// Compute 2D angle histograms from stored position and momentum data
+		auto pionAngleHist = computeAngleHistogram(simRun->pionExitPlanePositions, cfg_,
+			fAngleMinThetaX, fAngleMaxThetaX, fAngleMinThetaY, fAngleMaxThetaY);
 		write_csv_2d(outDir_ + "/pion_exit_plane_angles.csv", 
-					 simRun->pionExitPlaneAngleHistograms, 
+					 pionAngleHist, 
 					 cfg_.nAngleBinsThetaX, cfg_.nAngleBinsThetaY);
-		if (cfg_.angleIncludeBackground)
+		if (cfg_.angleIncludeBackground && !simRun->backgroundExitPlanePositions.empty())
 		{
+			auto bgAngleHist = computeAngleHistogram(simRun->backgroundExitPlanePositions, cfg_,
+				fAngleMinThetaX, fAngleMaxThetaX, fAngleMinThetaY, fAngleMaxThetaY);
 			write_csv_2d(outDir_ + "/background_exit_plane_angles.csv", 
-						 simRun->backgroundExitPlaneAngleHistograms, 
+						 bgAngleHist, 
 						 cfg_.nAngleBinsThetaX, cfg_.nAngleBinsThetaY);
 		}
 		
@@ -251,6 +342,14 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 		angleMeta << std::setprecision(6);
 		angleMeta << "# Exit plane angle histogram metadata\n";
 		angleMeta << "# Angles are in radians, using atan2(px,pz) and atan2(py,pz)\n";
+		if (cfg_.normalizeHistograms)
+		{
+			angleMeta << "# Normalization: YES (values are probability distribution, sum to 1.0)\n";
+		}
+		else
+		{
+			angleMeta << "# Normalization: NO (raw particle counts)\n";
+		}
 		angleMeta << "# Histogram dimensions: " << cfg_.nAngleBinsThetaX << " x " << cfg_.nAngleBinsThetaY << "\n\n";
 		
 		angleMeta << "[ThetaX Bins]\n";
@@ -283,6 +382,45 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 			if (i < cfg_.nAngleBinsThetaY - 1) angleMeta << ", ";
 		}
 		angleMeta << "\n";
+		
+		// 1D Radial histograms (always computed if exit plane is enabled)
+		{
+			auto pionRadialHist = computeRadialHistogram(simRun->pionExitPlanePositions, cfg_);
+			write_csv_1d(outDir_ + "/pion_exit_plane_radial.csv", pionRadialHist);
+			
+			if (cfg_.angleIncludeBackground && !simRun->backgroundExitPlanePositions.empty())
+			{
+				auto bgRadialHist = computeRadialHistogram(simRun->backgroundExitPlanePositions, cfg_);
+				write_csv_1d(outDir_ + "/background_exit_plane_radial.csv", bgRadialHist);
+			}
+			
+			// Write radial histogram metadata
+			std::ofstream radMeta(outDir_ + "/radial_bin_edges.txt");
+			radMeta.setf(std::ios::scientific, std::ios::floatfield);
+			radMeta << std::setprecision(6);
+			radMeta << "# Exit plane 1D radial distance histogram\n";
+			radMeta << "# r = sqrt(x^2 + y^2)\n";
+			if (cfg_.normalizeHistograms)
+			{
+				radMeta << "# Normalization: YES (areal density: counts per unit area, normalized by shell area)\n";
+				radMeta << "# Units: counts / mm^2\n";
+			}
+			else
+			{
+				radMeta << "# Normalization: NO (raw particle counts per radial shell)\n";
+			}
+			radMeta << "# Histogram dimensions: " << cfg_.nRadialBins << " radial bins\n\n";
+			radMeta << "[Radial Bins]\n";
+			const double radialBinWidth = cfg_.GetRadialBinWidth();
+			radMeta << "bin_width = " << radialBinWidth << " mm\n";
+			radMeta << "nbins = " << cfg_.nRadialBins << "\n";
+			for (int i = 0; i < cfg_.nRadialBins; ++i) {
+				const double r_min = i * radialBinWidth;
+				const double r_max = (i + 1) * radialBinWidth;
+				const double r_center = (r_min + r_max) / 2.0;
+				radMeta << "  bin_" << i << ": [" << r_min << ", " << r_max << ") cm, center=" << r_center << " cm\n";
+			}
+		}
 	}
 	
 	// Write results.txt summary

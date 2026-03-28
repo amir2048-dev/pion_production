@@ -131,17 +131,6 @@ namespace
 		else if (idx >= nBins) idx = nBins - 1;
 		return idx;
 	}
-	// calculate theta_x and theta_y from momentum vector using atan2 for robustness
-	// theta_x = atan2(px, pz), theta_y = atan2(py, pz)
-	inline void computeThetaXY(const G4ThreeVector& p, double& thetaX, double& thetaY)
-	{
-		const double px = p.x();
-		const double py = p.y();
-		const double pz = p.z();
-		// Use atan2 to handle all angles, including large tilts; will be filtered later for pz<=0
-		thetaX = std::atan2(px, pz);
-		thetaY = std::atan2(py, pz);
-	}
 }
 MySteppingAction::~MySteppingAction()
 {}
@@ -221,6 +210,30 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 			}
 		}
 	}
+	
+	// Exit plane - store position and momentum for post-processing
+	if (cfg_.enableExitPlane && prePV==fExitPlanePV)
+	{
+		if (pdg == PDG_PionPlus || cfg_.angleIncludeBackground)
+		{
+			G4ThreeVector momentum = track->GetMomentum();
+			// Only consider forward-going tracks (pz > 0)
+			if (momentum.z() > 0.0) {
+				G4ThreeVector position = pre->GetPosition();
+				G4ThreeVector p_norm = momentum.unit();
+				Run::ExitPlaneHit hit{position.x(), position.y(), p_norm.x(), p_norm.y(), p_norm.z()};
+				
+				if (pdg == PDG_PionPlus)
+				{
+					fRunAction->fRun->pionExitPlanePositions.push_back(hit);
+				}
+				else
+				{
+					fRunAction->fRun->backgroundExitPlanePositions.push_back(hit);
+				}
+			}
+		}
+	}
     if (cfg_.runConvStats)
 	{
 		auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
@@ -284,35 +297,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     	}
     
 	}
-	if (cfg_.enableExitPlane && prePV==fExitPlanePV)
-	{
-		if (pdg == PDG_PionPlus || cfg_.angleIncludeBackground)
-		{
-			G4ThreeVector momentum = track->GetMomentum();
-			// Only consider forward-going tracks (pz > 0)
-			if (momentum.z() <= 0.0) {
-				// skip non-forward tracks for exit-plane angle scoring
-				goto after_exit_plane_angle;
-			}
-			double thetaX, thetaY;
-			computeThetaXY(momentum, thetaX, thetaY);
-			int ithetaX = thetaXBin(thetaX, fRunAction->GetAngleMinThetaX(), fRunAction->GetAngleMaxThetaX(), cfg_.nAngleBinsThetaX);
-			int ithetaY = thetaYBin(thetaY, fRunAction->GetAngleMinThetaY(), fRunAction->GetAngleMaxThetaY(), cfg_.nAngleBinsThetaY);
-			if (0<=ithetaX && ithetaX<cfg_.nAngleBinsThetaX && 0<=ithetaY && ithetaY<cfg_.nAngleBinsThetaY)
-			{
-				const int index = ithetaX + ithetaY * cfg_.nAngleBinsThetaX;
-				if (pdg == PDG_PionPlus)
-				{
-					fRunAction->fRun->pionExitPlaneAngleHistograms[index] += 1.0;
-				}
-				else
-				{
-					fRunAction->fRun->backgroundExitPlaneAngleHistograms[index] += 1.0;
-				}
-			}
-		}
-		after_exit_plane_angle: ;
-	}
+	
 	if(cfg_.runDebug)
 	{	
 		fRunAction->fRun->steps+=1; // Count all steps

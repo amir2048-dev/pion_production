@@ -57,6 +57,13 @@ void Run::Merge(const G4Run* aRun)
 		pionExitPlaneAngleHistograms[i]+=localRun->pionExitPlaneAngleHistograms[i];
 		backgroundExitPlaneAngleHistograms[i]+=localRun->backgroundExitPlaneAngleHistograms[i];
 	}
+	// mergeing exit plane position data for radial analysis
+	pionExitPlanePositions.insert(pionExitPlanePositions.end(), 
+								  localRun->pionExitPlanePositions.begin(), 
+								  localRun->pionExitPlanePositions.end());
+	backgroundExitPlanePositions.insert(backgroundExitPlanePositions.end(),
+										localRun->backgroundExitPlanePositions.begin(),
+										localRun->backgroundExitPlanePositions.end());
 	// mergeing genrator beam distribution in the X-Y plane of the absorber
 	const G4int nB = cfg_.nAbsorberX * cfg_.nAbsorberY;
 	for (int i=0;i<nB;i++)

@@ -2,6 +2,7 @@
 #include "globals.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
+#include <cmath>
 
 struct SimConfig 
 {
@@ -26,7 +27,7 @@ struct SimConfig
     // absorber half size
     G4double absorberX = 0.5 * cm;
     G4double absorberY = 0.5 * cm;
-    G4double absorberZ = 0.125 * cm;
+    G4double absorberZ = 0.5 * cm;
 
     // world origin (center)
     G4double worldXOrigin = 0.0 * cm;
@@ -58,6 +59,28 @@ struct SimConfig
     G4double angleMaxThetaY        = 0.5;            // manual override: max angle in radians
     // angle selection options
     G4bool   angleIncludeBackground = false;          // if false, skip bg hist
+    
+    // ----- Exit plane radial distance distribution -----
+    // 1D histogram of particle counts at different radii r = sqrt(x^2 + y^2)
+    // Automatically enabled when enableExitPlane is true (no separate flag needed)
+    G4int    nRadialBins            = 10;              // number of radial bins
+    // radialBinWidth is auto-computed from exit plane size: GetMaxRadialDistance() / nRadialBins
+    
+    // Helper: compute max radius for binning (inscribed circle in the rectangular exit plane)
+    // The largest circle that fits inside the rectangular exit plane has radius = min(halfX, halfY)
+    G4double GetMaxRadialDistance() const { 
+        return std::min(exitPlaneHalfX, exitPlaneHalfY); 
+    }
+    
+    // Helper: compute radial bin width automatically
+    G4double GetRadialBinWidth() const {
+        return GetMaxRadialDistance() / nRadialBins;
+    }
+    
+    // ----- Histogram normalization -----
+    G4bool   normalizeHistograms    = false;          // if true, normalize histograms to density/probability
+    // For angle histograms: normalize by total counts to get probability distribution
+    // For radial histograms: normalize by shell area (Jacobian) to get areal density
     
     // primary gun parameters
     std::string gunParticle = "e-";
