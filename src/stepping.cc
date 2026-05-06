@@ -1,28 +1,13 @@
 #include "stepping.hh" 
 #include "G4TrackStatus.hh"
 #include <cmath>
+
 namespace 
 {
-	constexpr G4int PDG_Gamma    = 22;     // γ
-	constexpr G4int PDG_Electron = 11;     // e⁻
-	constexpr G4int PDG_Positron = -11;    // e⁺
-	constexpr G4int PDG_PionPlus = 211;    // π⁺
-	constexpr G4int PDG_PionMinus= -211;   // π⁻
-	constexpr G4int PDG_PionZero = 111;    // π⁰
-	constexpr G4int PDG_Neutron  = 2112;   // n
 	auto clampIndex = [](int idx, const SimConfig& cfg){return idx < 0 ? 0 : (idx > cfg.energymaxIndex ? cfg.energymaxIndex : idx);};
 	auto energyToIndex = [](G4double ekin, const SimConfig& cfg) -> int {
 		return static_cast<int>(ekin / cfg.getEnergyBinWidth() + 0.5);
 	};
-	inline bool IsAllowedPDG(G4int pdg)
-    {
-		// gamma, e-, e+, pi+, pi-, neutron
-		switch (pdg) 
-		{
-			case PDG_Gamma: case PDG_Electron: case PDG_Positron: case PDG_PionPlus: case PDG_PionMinus: case PDG_Neutron: return true;
-			default: return false;
-		}
-    }
 	// Traverse segment p0->p1 across an X–Z grid. For each crossed cell (ix,iz)
 	// calls visit(ix, iz, segLenInCell) where segLenInCell is the physical length
 	// of the segment INSIDE that cell (same units as p0/p1, typically mm).
@@ -132,6 +117,7 @@ namespace
 		return idx;
 	}
 }
+
 MySteppingAction::~MySteppingAction()
 {}
 
@@ -142,7 +128,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	const G4int    pdg    = def->GetPDGEncoding();
 	
 	// Kill particles not in the allowed PDG list (if enabled)
-	if (cfg_.killDisallowedPDG && !IsAllowedPDG(pdg)) { 
+	if (cfg_.killDisallowedPDG && !IS_ALLOWED_PDG(pdg)) { 
 		track->SetTrackStatus(fStopAndKill); 
 		return;
 	}
@@ -157,7 +143,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	}
 
 	// Kill low-energy non-pion particles (if enabled)
-	if (cfg_.killLowEnergyNonPion && pdg != PDG_PionPlus && ekin < cfg_.lowEnergyThreshold) { 
+	if (cfg_.killLowEnergyNonPion && pdg != AllowedParticles::PionPlus && ekin < cfg_.lowEnergyThreshold) { 
 		track->SetTrackStatus(fStopAndKill); 
 		return;
 	}
@@ -168,7 +154,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 	const G4VPhysicalVolume* postPV = post->GetPhysicalVolume();
 	auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
     
-	if (pdg == PDG_PionPlus)
+	if (pdg == AllowedParticles::PionPlus)
 	{
 		if (cfg_.runPiPlusMain)
 		{
@@ -211,10 +197,23 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 		}
 	}
 	
+	// Collect theta = arccos(p.z / |p|) for particles leaving absorber (forward hemisphere only)
+	if (prePV==fAbsorberPV && postPV!=fAbsorberPV && IS_ALLOWED_PDG(pdg))
+	{
+		G4ThreeVector momentum = track->GetMomentum();
+		if (momentum.z() > 0.0) {
+			double p_mag = momentum.mag();
+			if (p_mag > 0.0) {
+				double theta = std::acos(std::min(1.0, momentum.z() / p_mag)); // clamp to avoid numerical errors
+				fRunAction->fRun->particleThetaHistograms[pdg].push_back(theta);
+			}
+		}
+	}
+	
 	// Exit plane - store position and momentum for post-processing
 	if (cfg_.enableExitPlane && prePV==fExitPlanePV)
 	{
-		if (pdg == PDG_PionPlus || cfg_.angleIncludeBackground)
+		if (pdg == AllowedParticles::PionPlus || cfg_.angleIncludeBackground)
 		{
 			G4ThreeVector momentum = track->GetMomentum();
 			// Only consider forward-going tracks (pz > 0)
@@ -223,7 +222,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
 				G4ThreeVector p_norm = momentum.unit();
 				Run::ExitPlaneHit hit{position.x(), position.y(), p_norm.x(), p_norm.y(), p_norm.z()};
 				
-				if (pdg == PDG_PionPlus)
+				if (pdg == AllowedParticles::PionPlus)
 				{
 					fRunAction->fRun->pionExitPlanePositions.push_back(hit);
 				}
@@ -237,13 +236,13 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     if (cfg_.runConvStats)
 	{
 		auto  IsFirstStepInVolume = step->IsFirstStepInVolume();
-		if (pdg == PDG_Gamma  && prePV==fAbsorberPV && IsFirstStepInVolume)
+		if (pdg == AllowedParticles::Gamma  && prePV==fAbsorberPV && IsFirstStepInVolume)
 		{
 	    	int i = clampIndex(energyToIndex(ekin, cfg_), cfg_);
 	    	fRunAction->fRun->gammaEnergy[i] +=1;
 		}
 
-    	if (pdg == PDG_Electron&& prePV==fAbsorberPV)
+    	if (pdg == AllowedParticles::Electron&& prePV==fAbsorberPV)
     	{
 			G4ThreeVector p0 = pre->GetPosition();
 			G4ThreeVector p1 = step->GetPostStepPoint()->GetPosition();
@@ -259,7 +258,7 @@ void MySteppingAction::UserSteppingAction(const G4Step *step)
     	}
     
     
-     	if (pdg == PDG_Gamma&& prePV==fAbsorberPV)
+     	if (pdg == AllowedParticles::Gamma&& prePV==fAbsorberPV)
     	{
 			G4ThreeVector p0 = pre->GetPosition();
 			G4ThreeVector p1 = step->GetPostStepPoint()->GetPosition();

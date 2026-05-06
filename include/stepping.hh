@@ -8,6 +8,8 @@
 #include "event.hh"
 #include "runAction.hh"
 #include "SimConfig.hh"
+#include <string>
+
 class MySteppingAction: public G4UserSteppingAction
 {
 public:

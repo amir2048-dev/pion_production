@@ -3,12 +3,44 @@
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
 #include <cmath>
+#include <vector>
+
+// PDG codes for allowed particles (central definition - modify here to add/remove particles)
+namespace AllowedParticles {
+    constexpr G4int Gamma    = 22;
+    constexpr G4int Electron = 11;
+    constexpr G4int Positron = -11;
+    constexpr G4int PionPlus = 211;
+    constexpr G4int PionMinus= -211;
+    constexpr G4int PionZero = 111;
+    constexpr G4int Neutron  = 2112;
+    constexpr G4int Proton   = 2212;
+    constexpr G4int Muon     = 13;
+    constexpr G4int Antimuon = -13;
+    
+    // List of all allowed particle PDG codes - modify this to add/remove particles
+    static const std::vector<G4int> ALL_ALLOWED_PDGS = {
+        Gamma, Electron, Positron, PionPlus, PionMinus, Neutron, Proton, Muon, Antimuon
+    };
+}
+
+// Macro for fast PDG allowed check - no function overhead
+#define IS_ALLOWED_PDG(pdg) \
+    ((pdg) == AllowedParticles::Gamma || \
+     (pdg) == AllowedParticles::Electron || \
+     (pdg) == AllowedParticles::Positron || \
+     (pdg) == AllowedParticles::PionPlus || \
+     (pdg) == AllowedParticles::PionMinus || \
+     (pdg) == AllowedParticles::Neutron || \
+     (pdg) == AllowedParticles::Proton || \
+     (pdg) == AllowedParticles::Muon || \
+     (pdg) == AllowedParticles::Antimuon)
 
 struct SimConfig 
 {
     //run name and description
-    std::string runName = "converter lead thickness scan";
-    std::string runDescription = "checking different lead thicknesses for converter optimization"; 
+    std::string runName = "angular histogram test ";
+    std::string runDescription = "Test of angular histogram collection for particles exiting absorber"; 
 
     // random seed control
     G4bool   useFixedSeed = false;     // if true, use fixed seed for reproducibility
@@ -41,7 +73,7 @@ struct SimConfig
 
     // ----- Exit plane / angle scoring -----
     // master on/off
-    G4bool   enableExitPlane       = true;     
+    G4bool   enableExitPlane       = false;     
     // exit plane position and half size     
     G4double exitPlaneZ            = 10.0 * cm;
     G4double exitPlaneHalfX        = 10.0 * cm;
@@ -50,6 +82,9 @@ struct SimConfig
     // theta_x = atan2(px, pz), theta_y = atan2(py, pz)
     G4int    nAngleBinsThetaX      = 5;            // number of bins in x-direction
     G4int    nAngleBinsThetaY      = 5;            // number of bins in y-direction
+    // 1D theta histogram (arccos(p.z/|p|)) from particles leaving absorber
+    G4int    nThetaBins            = 100;          // number of bins for theta histogram (0 to pi/2)
+    G4bool   thetaApplySolidAngleBias = true;      // divide by sin(θ) to correct for solid angle bias
     // auto-compute angle ranges from geometry, or override manually
     G4bool   angleAutoCompute      = true;           // if true, compute from absorber/exit-plane geometry
     // manual overrides (only used if angleAutoCompute = false)
@@ -170,4 +205,21 @@ struct SimConfig
     //G4double deltaChord  = 50 * um;
     //G4double minEpsilon  = 1e-5;
     //G4double maxEpsilon  = 1e-4;
+    
+    // Helper: get particle name from PDG code
+    std::string GetParticleName(G4int pdg) const {
+        switch (pdg) {
+            case AllowedParticles::Gamma: return "gamma";
+            case AllowedParticles::Electron: return "electron";
+            case AllowedParticles::Positron: return "positron";
+            case AllowedParticles::PionPlus: return "pion_plus";
+            case AllowedParticles::PionMinus: return "pion_minus";
+            case AllowedParticles::PionZero: return "pion_zero";
+            case AllowedParticles::Neutron: return "neutron";
+            case AllowedParticles::Proton: return "proton";
+            case AllowedParticles::Muon: return "muon";
+            case AllowedParticles::Antimuon: return "antimuon";
+            default: return "particle_" + std::to_string(pdg);
+        }
+    }
 };

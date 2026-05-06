@@ -1,5 +1,6 @@
 #include "run.hh"
 #include "event.hh"
+
 Run::Run(const SimConfig& cfg) : cfg_(cfg)
 {
     //spectra assignment
@@ -24,6 +25,12 @@ Run::Run(const SimConfig& cfg) : cfg_(cfg)
 	//genrator beam map assignment
 	const int nB = cfg_.nAbsorberX * cfg_.nAbsorberY;
 	genratorBeamXY.assign(nB, 0.0);
+	
+	// Initialize particle theta histograms with all allowed particles
+	for (G4int pdg : AllowedParticles::ALL_ALLOWED_PDGS)
+	{
+		particleThetaHistograms[pdg];
+	}
 }
 void Run::Merge(const G4Run* aRun)
 {
@@ -64,6 +71,12 @@ void Run::Merge(const G4Run* aRun)
 	backgroundExitPlanePositions.insert(backgroundExitPlanePositions.end(),
 										localRun->backgroundExitPlanePositions.begin(),
 										localRun->backgroundExitPlanePositions.end());
+	// merge theta histograms
+	for (const auto& pair : localRun->particleThetaHistograms)
+	{
+		particleThetaHistograms[pair.first].insert(particleThetaHistograms[pair.first].end(),
+		                                             pair.second.begin(), pair.second.end());
+	}
 	// mergeing genrator beam distribution in the X-Y plane of the absorber
 	const G4int nB = cfg_.nAbsorberX * cfg_.nAbsorberY;
 	for (int i=0;i<nB;i++)

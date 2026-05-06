@@ -4,6 +4,7 @@
 #include "G4Run.hh"
 #include "G4UserEventAction.hh"
 #include <vector>
+#include <map>
 #include "SimConfig.hh"
 
 
@@ -43,7 +44,9 @@ public:
 	std::vector<ExitPlaneHit> pionExitPlanePositions;
 	std::vector<ExitPlaneHit> backgroundExitPlanePositions;
 
-
+	// Theta angle measurements for particles leaving absorber
+	// Maps PDG code to vector of theta values (theta = arccos(p.z/|p|))
+	std::map<G4int, std::vector<double>> particleThetaHistograms;
 	
 	// genrator beam grid (X-Y)
 	std::vector<double> genratorBeamXY;

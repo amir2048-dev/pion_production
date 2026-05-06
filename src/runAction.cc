@@ -10,6 +10,7 @@
 #include "G4SystemOfUnits.hh"
 #include "G4UnitsTable.hh"
 #include "G4Threading.hh"
+#include "stepping.hh"
 
 namespace
 {
@@ -53,15 +54,17 @@ namespace
     	ofs.setf(std::ios::scientific, std::ios::floatfield);
     	ofs << std::setprecision(3);
 
-    // Outer: x (rows). Inner: z (columns, left->right).
-    for (int ix = 0; ix < nx; ++ix) {
-        for (int iz = 0; iz < nz; ++iz) {
-            if (iz) ofs << ',';
-            ofs << (static_cast<double>(data[iz * nx + ix]) * scale);
-        }
-        ofs << '\n';
-    }
-}
+		// Outer: x (rows). Inner: z (columns, left->right).
+		for (int ix = 0; ix < nx; ++ix)
+		{
+			for (int iz = 0; iz < nz; ++iz)
+			{
+				if (iz) ofs << ',';
+				ofs << (static_cast<double>(data[iz * nx + ix]) * scale);
+			}
+			ofs << '\n';
+		}
+	}
 	// Helper: compute 2D angle histogram (theta_x vs theta_y) from positions and momentum
 	inline std::vector<double> computeAngleHistogram(
 		const std::vector<Run::ExitPlaneHit>& hits,
@@ -420,6 +423,61 @@ void MyRunAction::EndOfRunAction(const G4Run* run)
 				const double r_center = (r_min + r_max) / 2.0;
 				radMeta << "  bin_" << i << ": [" << r_min << ", " << r_max << ") cm, center=" << r_center << " cm\n";
 			}
+		}
+	}
+	
+	// Theta angle histogram (arccos(p.z/|p|) from absorber exit, forward hemisphere only)
+
+	const int nBins = cfg_.nThetaBins;
+	const double thetaMin = 0.0, thetaMax = M_PI / 2.0, binWidth = thetaMax / nBins;
+	
+	// Write shared histogram info
+	std::ofstream info(outDir_ + "/theta_histogram_info.txt");
+	info << "# Theta = arccos(p.z/|p|): polar angle from z-axis\n";
+	info << "# Theta=0°: forward, Theta=90°: perpendicular to z-axis\n";
+	info << "# Range: [0, π/2] rad (forward hemisphere)\n";
+	info << "# Solid angle correction: " << (cfg_.thetaApplySolidAngleBias ? "YES (dN/dΩ)" : "NO (raw counts)") << "\n";
+	info << "[Config] bins=" << nBins << " width=" << binWidth << " rad\n";
+	info.close();
+	
+	// Compute and write particle histograms
+	for (const auto& [pdgCode, thetaValues] : simRun->particleThetaHistograms)
+	{
+		std::vector<double> hist(nBins, 0.0);
+		
+		// Fill histogram
+		for (double theta : thetaValues)
+		{
+			int bin = static_cast<int>((theta - thetaMin) / binWidth);
+			if (bin >= 0 && bin < nBins) hist[bin] += 1.0;
+		}
+		
+		// Normalize and apply solid angle correction in single pass
+		double total = 0.0;
+		if (cfg_.normalizeHistograms || cfg_.thetaApplySolidAngleBias)
+		{
+			if (cfg_.normalizeHistograms) {
+				for (double v : hist) total += v;
+				if (total <= 0.0) total = 1.0;
+			} else {
+				total = 1.0;
+			}
+			
+			for (int i = 0; i < nBins; ++i)
+			{
+				if (cfg_.normalizeHistograms) hist[i] /= total;
+				if (cfg_.thetaApplySolidAngleBias) {
+					double sinTheta = std::sin(thetaMin + (i + 0.5) * binWidth);
+					if (sinTheta > 1e-6) hist[i] /= sinTheta;
+				}
+			}
+		}
+		
+		if (thetaValues.empty()) {
+			if (IsMaster()) G4cout << "[RunAction] Histogram not created: " << cfg_.GetParticleName(pdgCode) << " (0 particles)\n";
+		} else {
+			write_csv_1d(outDir_ + "/theta_" + cfg_.GetParticleName(pdgCode) + ".csv", hist);
+			if (IsMaster()) G4cout << "[RunAction] Theta histogram: " << cfg_.GetParticleName(pdgCode) << " (" << thetaValues.size() << " particles)\n";
 		}
 	}
 	
